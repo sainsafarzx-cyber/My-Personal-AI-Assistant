@@ -1,0 +1,40 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Outer segmented HUD ring -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M12,2.5 A9.5,9.5 0 0,1 21.5,12"
+        android:strokeWidth="2.1"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M12,21.5 A9.5,9.5 0 0,1 2.5,12"
+        android:strokeWidth="2.1"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M5.3,5.3 A9.5,9.5 0 0,1 10.2,2.7"
+        android:strokeWidth="1.6"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M18.7,18.7 A9.5,9.5 0 0,1 13.8,21.3"
+        android:strokeWidth="1.6"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <!-- Inner core ring and L-spark -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M12,6.8 A5.2,5.2 0 1,1 11.99,6.8 Z"
+        android:strokeWidth="1.7"
+        android:strokeColor="#FFFFFF" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,9.2 A2.8,2.8 0 1,1 11.99,9.2 Z" />
+</vector>

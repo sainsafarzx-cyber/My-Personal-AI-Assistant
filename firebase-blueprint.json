@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "CreatorStamp": {
+      "title": "CreatorStamp",
+      "description": "Public non-PII creator and owner identity banner shown to everyone who installs or opens LEON AI.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "description": "Firebase Auth UID of the creator who published the stamp." },
+        "creatorName": { "type": "string", "description": "Owner/Creator display name announced by LEON AI." },
+        "tagline": { "type": "string", "description": "Optional creator tagline or custom app intro." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": ["ownerId", "creatorName", "tagline", "createdAt", "updatedAt"]
+    },
+    "UserPreferences": {
+      "title": "UserPreferences",
+      "description": "Assistant preferences, owner identity, and memory consent settings for a LEON x ALI AI user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID of the owner." },
+        "assistantName": { "type": "string", "description": "Assistant display name (e.g. LEON AI)." },
+        "ownerName": { "type": "string", "description": "Saved owner/creator display name remembered forever." },
+        "creatorTagline": { "type": "string", "description": "Optional creator motto or tagline." },
+        "defaultLanguage": { "type": "string", "enum": ["hi", "en", "hinglish"], "description": "Default conversational language." },
+        "alwaysReadyEnabled": { "type": "boolean", "description": "Whether JARVIS Always-Ready listening is enabled." },
+        "memoryConsentGranted": { "type": "boolean", "description": "Permission for ALI AI automatic permanent memory." },
+        "voiceSpeed": { "type": "number", "description": "Text-to-speech rate between 0.5 and 2.0." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "assistantName", "ownerName", "creatorTagline", "defaultLanguage", "alwaysReadyEnabled", "memoryConsentGranted", "voiceSpeed", "createdAt", "updatedAt"]
+    },
+    "MemoryItem": {
+      "title": "MemoryItem",
+      "description": "Permanent or user-approved long-term memory stored by ALI AI.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "memoryKey": { "type": "string" },
+        "memoryValue": { "type": "string" },
+        "category": { "type": "string", "enum": ["preference", "fact", "contact", "routine_hint"] },
+        "approved": { "type": "boolean" },
+        "isPermanent": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "memoryKey", "memoryValue", "category", "approved", "isPermanent", "createdAt", "updatedAt"]
+    },
+    "AutomationRoutine": {
+      "title": "AutomationRoutine",
+      "description": "Custom multi-step voice automation routine executed by LEON AI.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "triggerPhrase": { "type": "string" },
+        "steps": { "type": "array", "description": "Bounded list of up to 10 sequential command steps." },
+        "enabled": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "triggerPhrase", "steps", "enabled", "createdAt", "updatedAt"]
+    },
+    "DailyTask": {
+      "title": "DailyTask",
+      "description": "User task or scheduled reminder managed via voice or HUD.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "notes": { "type": "string" },
+        "dueLabel": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "notes", "dueLabel", "priority", "completed", "createdAt", "updatedAt"]
+    },
+    "ConversationMessage": {
+      "title": "ConversationMessage",
+      "description": "Persisted turn in the LEON x ALI AI conversational stream.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "text": { "type": "string" },
+        "language": { "type": "string", "enum": ["hi", "en", "hinglish"] },
+        "actionSummary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role", "text", "language", "actionSummary", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/app_branding/{stampId}": {
+      "schema": { "$ref": "#/entities/CreatorStamp" },
+      "description": "Non-PII global app creator stamp ('creator_stamp') readable on any device download and writable only by its owning user."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPreferences" },
+      "description": "Per-user LEON x ALI preferences, owner name, and forever memory consent state."
+    },
+    "/users/{userId}/memories/{memoryId}": {
+      "schema": { "$ref": "#/entities/MemoryItem" },
+      "description": "Forever & user-approved long-term memories for ALI AI."
+    },
+    "/users/{userId}/routines/{routineId}": {
+      "schema": { "$ref": "#/entities/AutomationRoutine" },
+      "description": "Custom multi-step LEON automation routines."
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/DailyTask" },
+      "description": "Daily tasks and scheduled reminders."
+    },
+    "/users/{userId}/conversations/{messageId}": {
+      "schema": { "$ref": "#/entities/ConversationMessage" },
+      "description": "Persisted ALI AI conversation transcript."
+    }
+  }
+}

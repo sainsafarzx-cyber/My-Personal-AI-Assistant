@@ -1,0 +1,6 @@
+{
+  "name": "LEON AI",
+  "description": "LEON AI powered by ALI AI — futuristic Android voice assistant with smart device control, routines, and long-term memory.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

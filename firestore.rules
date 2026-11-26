@@ -1,0 +1,230 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- ENTITY VALIDATION BLUEPRINTS ---
+    function isValidCreatorStamp(data) {
+      return data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+             data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 60 &&
+             data.tagline is string && data.tagline.size() <= 160;
+    }
+
+    function isValidUserPreferences(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.assistantName is string && data.assistantName.size() >= 1 && data.assistantName.size() <= 30 &&
+             data.ownerName is string && data.ownerName.size() <= 60 &&
+             data.creatorTagline is string && data.creatorTagline.size() <= 160 &&
+             data.defaultLanguage in ['hi', 'en', 'hinglish'] &&
+             data.alwaysReadyEnabled is bool &&
+             data.memoryConsentGranted is bool &&
+             data.voiceSpeed is number && data.voiceSpeed >= 0.5 && data.voiceSpeed <= 2.0;
+    }
+
+    function isValidMemoryItem(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.memoryKey is string && data.memoryKey.size() >= 1 && data.memoryKey.size() <= 80 &&
+             data.memoryValue is string && data.memoryValue.size() >= 1 && data.memoryValue.size() <= 500 &&
+             data.category in ['preference', 'fact', 'contact', 'routine_hint'] &&
+             data.approved is bool &&
+             data.isPermanent is bool;
+    }
+
+    function isValidAutomationRoutine(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+             data.triggerPhrase is string && data.triggerPhrase.size() >= 1 && data.triggerPhrase.size() <= 120 &&
+             data.steps is list && data.steps.size() >= 1 && data.steps.size() <= 10 &&
+             data.steps[0] is string && data.steps[0].size() >= 1 && data.steps[0].size() <= 240 &&
+             data.enabled is bool;
+    }
+
+    function isValidDailyTask(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.notes is string && data.notes.size() <= 500 &&
+             data.dueLabel is string && data.dueLabel.size() <= 80 &&
+             data.priority in ['low', 'medium', 'high'] &&
+             data.completed is bool;
+    }
+
+    function isValidConversationMessage(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.role in ['user', 'model'] &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 4000 &&
+             data.language in ['hi', 'en', 'hinglish'] &&
+             data.actionSummary is string && data.actionSummary.size() <= 400;
+    }
+
+    // --- PUBLIC NON-PII CREATOR STAMP ---
+    match /app_branding/{stampId} {
+      // Any device installing the app can read the single canonical non-PII creator_stamp document;
+      // listing is explicitly disabled and writes are locked to the authenticated creator UID.
+      allow get: if isValidId(stampId) && stampId == 'creator_stamp';
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(stampId) &&
+                       stampId == 'creator_stamp' &&
+                       incoming().keys().hasAll(['ownerId', 'creatorName', 'tagline', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['ownerId', 'creatorName', 'tagline', 'createdAt', 'updatedAt']) &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidCreatorStamp(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(stampId) &&
+                       stampId == 'creator_stamp' &&
+                       existing().ownerId == request.auth.uid &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['creatorName', 'tagline', 'updatedAt']) &&
+                       isValidCreatorStamp(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(stampId) &&
+                       stampId == 'creator_stamp' &&
+                       existing().ownerId == request.auth.uid;
+    }
+
+    // --- USER-OWNED VAULT ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'assistantName', 'ownerName', 'creatorTagline', 'defaultLanguage', 'alwaysReadyEnabled', 'memoryConsentGranted', 'voiceSpeed', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'assistantName', 'ownerName', 'creatorTagline', 'defaultLanguage', 'alwaysReadyEnabled', 'memoryConsentGranted', 'voiceSpeed', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidUserPreferences(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserPreferences(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['assistantName', 'ownerName', 'creatorTagline', 'defaultLanguage', 'alwaysReadyEnabled', 'memoryConsentGranted', 'voiceSpeed', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // 1. Permanent & Approved Long-Term Memory Items
+      match /memories/{memoryId} {
+        allow get: if isOwner(userId) && isValidId(memoryId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(memoryId) &&
+                         incoming().keys().hasAll(['userId', 'memoryKey', 'memoryValue', 'category', 'approved', 'isPermanent', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'memoryKey', 'memoryValue', 'category', 'approved', 'isPermanent', 'createdAt', 'updatedAt']) &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         isValidMemoryItem(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(memoryId) &&
+                         isValidMemoryItem(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['memoryKey', 'memoryValue', 'category', 'approved', 'isPermanent', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(memoryId);
+      }
+
+      // 2. Custom Automation Routines
+      match /routines/{routineId} {
+        allow get: if isOwner(userId) && isValidId(routineId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(routineId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'triggerPhrase', 'steps', 'enabled', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'triggerPhrase', 'steps', 'enabled', 'createdAt', 'updatedAt']) &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         isValidAutomationRoutine(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(routineId) &&
+                         isValidAutomationRoutine(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'triggerPhrase', 'steps', 'enabled', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(routineId);
+      }
+
+      // 3. Daily Tasks & Reminders
+      match /tasks/{taskId} {
+        allow get: if isOwner(userId) && isValidId(taskId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'notes', 'dueLabel', 'priority', 'completed', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'notes', 'dueLabel', 'priority', 'completed', 'createdAt', 'updatedAt']) &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         isValidDailyTask(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(taskId) &&
+                         isValidDailyTask(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'notes', 'dueLabel', 'priority', 'completed', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(taskId);
+      }
+
+      // 4. Conversation History
+      match /conversations/{messageId} {
+        allow get: if isOwner(userId) && isValidId(messageId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(messageId) &&
+                         incoming().keys().hasAll(['userId', 'role', 'text', 'language', 'actionSummary', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'role', 'text', 'language', 'actionSummary', 'createdAt']) &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         isValidConversationMessage(incoming(), userId);
+
+        allow update: if false;
+        allow delete: if isOwner(userId) && isValidId(messageId);
+      }
+    }
+  }
+}
