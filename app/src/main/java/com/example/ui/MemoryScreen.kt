@@ -127,6 +127,7 @@ fun MemoryScreen(
     val alwaysReadyPermissionsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
+        com.example.core.LeonRuntimePrefs.setOneTimePermissionsAsked(context, true)
         viewModel.refreshTelemetry()
         val micOk = results[Manifest.permission.RECORD_AUDIO] == true ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -222,11 +223,11 @@ fun MemoryScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "LEON AI Always-Ready Mode",
+                                text = "ALI AI Always-Ready Mode",
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "Wake word \"Hey Leon\" via foreground service",
+                                text = "Wake word \"Hey Ali\" via foreground service",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -265,7 +266,7 @@ fun MemoryScreen(
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "Keep \"Hey Leon\", voice calling, AI Q&A, music, torch & alert reading working while screen is off (WhatsApp/SMS stay unlock-protected)",
+                                text = "Keep \"Hey Ali\", voice calling, AI Q&A, music, torch & alert reading working while screen is off (WhatsApp/SMS stay unlock-protected)",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

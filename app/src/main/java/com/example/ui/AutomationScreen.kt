@@ -116,7 +116,7 @@ fun AutomationScreen(
         item {
             Column(modifier = Modifier.fillMaxWidth().widthIn(max = 760.dp)) {
                 Text(
-                    text = "LEON CONTROL DECK",
+                    text = "ALI AI CONTROL DECK",
                     style = MaterialTheme.typography.headlineMedium,
                     color = ArcCyan
                 )
@@ -234,7 +234,7 @@ fun AutomationScreen(
                             icon = Icons.Rounded.Alarm,
                             label = "Alarm 7 AM",
                             active = false,
-                            onClick = { viewModel.openDeviceShortcut(ActionType.SET_ALARM, target = "LEON Alarm", payload = "07:00") },
+                            onClick = { viewModel.openDeviceShortcut(ActionType.SET_ALARM, target = "ALI Alarm", payload = "07:00") },
                             modifier = Modifier.weight(1f)
                         )
                         QuickControlButton(
@@ -409,7 +409,7 @@ fun AutomationScreen(
                     modifier = Modifier.fillMaxWidth().widthIn(max = 760.dp)
                 ) {
                     Text(
-                        text = "All clear, Boss! Ask LEON to add a reminder or tap New Task.",
+                        text = "All clear, Boss! Ask ALI AI to add a reminder or tap New Task.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(16.dp)

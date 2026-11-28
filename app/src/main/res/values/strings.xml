@@ -1,12 +1,12 @@
 <resources>
-    <string name="app_name">LEON AI</string>
-    <string name="accessibility_service_label">LEON AI Automation Helper</string>
-    <string name="accessibility_service_description">Allows LEON AI to perform user-confirmed navigation actions and user-started Story/Video Auto-Publish steps for Instagram, Facebook, and WhatsApp only when explicitly armed by you.</string>
-    <string name="notification_listener_label">LEON AI Notification Reader</string>
-    <string name="voice_channel_name">LEON Always-Ready Voice</string>
-    <string name="voice_channel_desc">Hands-free Hey Leon wake-word listening service</string>
-    <string name="reminder_channel_name">LEON Reminders &amp; Tasks</string>
-    <string name="reminder_channel_desc">Scheduled spoken &amp; visual reminders from LEON AI</string>
+    <string name="app_name">ALI AI</string>
+    <string name="accessibility_service_label">ALI AI Automation Helper</string>
+    <string name="accessibility_service_description">Allows ALI AI to perform user-confirmed navigation actions and user-started Story/Video Auto-Publish steps for Instagram, Facebook, and WhatsApp only when explicitly armed by you.</string>
+    <string name="notification_listener_label">ALI AI Notification Reader</string>
+    <string name="voice_channel_name">ALI AI Always-Ready Voice</string>
+    <string name="voice_channel_desc">Hands-free Hey Ali wake-word listening service</string>
+    <string name="reminder_channel_name">ALI AI Reminders &amp; Tasks</string>
+    <string name="reminder_channel_desc">Scheduled spoken &amp; visual reminders from ALI AI</string>
     <string name="default_greeting_hi">जी बॉस! बताइए, मैं आपकी क्या मदद कर सकता हूँ?</string>
     <string name="lock_screen_action_listen">Listen</string>
     <string name="lock_screen_action_briefing">Alerts</string>
@@ -14,8 +14,8 @@
     <string name="lock_screen_action_music_pause">Pause Music</string>
     <string name="lock_screen_action_stop">Stop</string>
     <string name="default_creator_name" translatable="false"></string>
-    <string name="creator_tagline_default">Personalized LEON AI × ALI</string>
-    <string name="call_screening_label">LEON AI Call Receptionist</string>
-    <string name="call_channel_name">LEON AI Call Receptionist</string>
+    <string name="creator_tagline_default">Personalized ALI AI</string>
+    <string name="call_screening_label">ALI AI Call Receptionist</string>
+    <string name="call_channel_name">ALI AI Call Receptionist</string>
     <string name="call_channel_desc">Hands-free AI receptionist for unanswered incoming calls</string>
 </resources>

@@ -76,7 +76,7 @@ fun handleFirestoreError(exception: Throwable, operationType: OperationType, pat
 data class FirestoreUserPreferences(
     @com.google.firebase.firestore.DocumentId val id: String = "",
     val userId: String = "",
-    val assistantName: String = "LEON AI",
+    val assistantName: String = "ALI AI",
     val ownerName: String = "",
     val creatorTagline: String = "",
     val defaultLanguage: String = AssistantLanguage.HINDI.code,
@@ -217,7 +217,7 @@ class FirebaseCloudSync(
             if (snap.exists()) {
                 docRef.update(
                     mapOf(
-                        "assistantName" to prefs.assistantName.ifBlank { "LEON AI" }.take(30),
+                        "assistantName" to prefs.assistantName.ifBlank { "ALI AI" }.take(30),
                         "ownerName" to cleanOwner,
                         "creatorTagline" to cleanTagline,
                         "defaultLanguage" to prefs.defaultLanguage,
@@ -231,7 +231,7 @@ class FirebaseCloudSync(
                 docRef.set(
                     mapOf(
                         "userId" to uid,
-                        "assistantName" to prefs.assistantName.ifBlank { "LEON AI" }.take(30),
+                        "assistantName" to prefs.assistantName.ifBlank { "ALI AI" }.take(30),
                         "ownerName" to cleanOwner,
                         "creatorTagline" to cleanTagline,
                         "defaultLanguage" to prefs.defaultLanguage,

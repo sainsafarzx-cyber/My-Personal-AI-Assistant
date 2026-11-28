@@ -41,7 +41,7 @@ enum class TaskPriority(val wireValue: String, val label: String) {
 @Entity(tableName = "user_preferences")
 data class UserPreferences(
     @PrimaryKey val id: Int = 1,
-    val assistantName: String = "LEON AI",
+    val assistantName: String = "ALI AI",
     val ownerName: String = "",
     val creatorTagline: String = "",
     val defaultLanguage: String = AssistantLanguage.HINDI.code,
@@ -253,7 +253,7 @@ data class DeviceTelemetry(
 enum class AirGestureAction(val label: String) {
     TOGGLE_FLASHLIGHT("Torch On/Off"),
     PLAY_PAUSE_MUSIC("Play/Pause Music"),
-    TRIGGER_VOICE("Wake LEON Voice")
+    TRIGGER_VOICE("Wake ALI Voice")
 }
 
 @Immutable

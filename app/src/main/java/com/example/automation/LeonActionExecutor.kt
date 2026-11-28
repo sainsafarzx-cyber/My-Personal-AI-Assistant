@@ -211,7 +211,7 @@ class LeonActionExecutor(private val context: Context) {
             ActionType.SAVE_MEMORY, ActionType.SET_OWNER_IDENTITY, ActionType.FETCH_NEWS,
             ActionType.OPEN_OFFLINE_VISION, ActionType.SOCIAL_AUTO_POST, ActionType.OPEN_LIFE_COMPASS,
             ActionType.OPEN_CALL_ASSISTANT ->
-                ActionExecutionOutcome(true, "Handled by LEON controller.")
+                ActionExecutionOutcome(true, "Handled by ALI AI controller.")
         }
     }
 
@@ -231,7 +231,7 @@ class LeonActionExecutor(private val context: Context) {
             flashlightActive = nextState
             ActionExecutionOutcome(true, if (nextState) "Flashlight turned ON." else "Flashlight turned OFF.")
         } catch (se: SecurityException) {
-            ActionExecutionOutcome(false, "Grant Camera permission in Security tab so LEON can control Flashlight.")
+            ActionExecutionOutcome(false, "Grant Camera permission in Security tab so ALI AI can control Flashlight.")
         } catch (e: Exception) {
             ActionExecutionOutcome(false, "Flashlight unavailable right now: ${e.localizedMessage ?: "Camera busy"}")
         }
@@ -481,7 +481,7 @@ class LeonActionExecutor(private val context: Context) {
         if (!NotificationBridge.listenerConnected.value) {
             return ActionExecutionOutcome(
                 false,
-                "Notification Listener permission is off. Enable LEON AI Notification Reader in Security tab."
+                "Notification Listener permission is off. Enable ALI AI Notification Reader in Security tab."
             )
         }
         val items = NotificationBridge.notifications.value
@@ -547,7 +547,7 @@ class LeonActionExecutor(private val context: Context) {
         val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(AlarmClock.EXTRA_HOUR, hour)
             putExtra(AlarmClock.EXTRA_MINUTES, minute)
-            putExtra(AlarmClock.EXTRA_MESSAGE, label.ifBlank { "LEON Alarm" })
+            putExtra(AlarmClock.EXTRA_MESSAGE, label.ifBlank { "ALI Alarm" })
             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -564,7 +564,7 @@ class LeonActionExecutor(private val context: Context) {
         }.coerceIn(1, 86400)
         val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
             putExtra(AlarmClock.EXTRA_LENGTH, seconds)
-            putExtra(AlarmClock.EXTRA_MESSAGE, label.ifBlank { "LEON Timer" })
+            putExtra(AlarmClock.EXTRA_MESSAGE, label.ifBlank { "ALI Timer" })
             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -659,7 +659,7 @@ class LeonActionExecutor(private val context: Context) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             if (launchSafe(appDetails).success) {
-                return ActionExecutionOutcome(true, "Opened LEON AI App Settings.")
+                return ActionExecutionOutcome(true, "Opened ALI AI App Settings.")
             }
         }
         return launchSafe(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -676,7 +676,7 @@ class LeonActionExecutor(private val context: Context) {
         return if (AccessibilityBridge.requestGlobalAction(globalAction)) {
             ActionExecutionOutcome(true, "Executed Accessibility navigation: $target.")
         } else {
-            ActionExecutionOutcome(false, "Enable LEON Accessibility Helper in Permissions to automate $target.")
+            ActionExecutionOutcome(false, "Enable ALI Accessibility Helper in Permissions to automate $target.")
         }
     }
 

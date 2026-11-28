@@ -270,7 +270,7 @@ class SocialMediaEngine(private val context: Context) {
         if (trimmed.isEmpty()) return
         runCatching {
             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            cm?.setPrimaryClip(ClipData.newPlainText("LEON Social Caption", trimmed))
+            cm?.setPrimaryClip(ClipData.newPlainText("ALI Social Caption", trimmed))
         }
     }
 
@@ -465,7 +465,7 @@ class SocialMediaEngine(private val context: Context) {
 
             return when (language) {
                 AssistantLanguage.ENGLISH -> {
-                    val body = if (cleanTopic.isNotBlank()) cleanTopic else "New moment shared via LEON AI!"
+                    val body = if (cleanTopic.isNotBlank()) cleanTopic else "New moment shared via ALI AI!"
                     "$body\n\n$tags"
                 }
                 AssistantLanguage.HINGLISH -> {

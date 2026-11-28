@@ -76,6 +76,9 @@ object VoiceServiceBridge {
     private val _alwaysReadyRunning = MutableStateFlow(false)
     val alwaysReadyRunning: StateFlow<Boolean> = _alwaysReadyRunning.asStateFlow()
 
+    private val _continuousConversationActive = MutableStateFlow(false)
+    val continuousConversationActive: StateFlow<Boolean> = _continuousConversationActive.asStateFlow()
+
     private val _lockScreenModeActive = MutableStateFlow(false)
     val lockScreenModeActive: StateFlow<Boolean> = _lockScreenModeActive.asStateFlow()
 
@@ -107,6 +110,14 @@ object VoiceServiceBridge {
         _alwaysReadyRunning.value = running
         if (!running) {
             _lockScreenModeActive.value = false
+            _orbState.value = VoiceOrbState.IDLE
+            _partialTranscript.value = ""
+        }
+    }
+
+    fun setContinuousConversationActive(active: Boolean) {
+        _continuousConversationActive.value = active
+        if (!active && !_alwaysReadyRunning.value && !_foregroundMicActive.value) {
             _orbState.value = VoiceOrbState.IDLE
             _partialTranscript.value = ""
         }

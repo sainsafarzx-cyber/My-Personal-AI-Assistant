@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "LEON AI"
+rootProject.name = "ALI AI"
 
 include(":app")

@@ -47,15 +47,15 @@ object CallReceptionistEngine {
         return when (language) {
             AssistantLanguage.ENGLISH -> {
                 val greet = if (hasKnownCaller) "Hello $callerClean, " else "Hello, "
-                "${greet}I am LEON AI, $bossTitle's personal assistant. $bossTitle $statusEnglish so I answered the call. May I ask your name and the purpose of your call so I can pass it along?"
+                "${greet}I am ALI AI, $bossTitle's personal assistant. $bossTitle $statusEnglish so I answered the call. May I ask your name and the purpose of your call so I can pass it along?"
             }
             AssistantLanguage.HINGLISH -> {
                 val greet = if (hasKnownCaller) "Namaste $callerClean, " else "Namaste, "
-                "${greet}main LEON AI bol raha hoon — $bossTitle ka personal assistant. $bossTitle $statusHindi isliye maine call receive kiya hai. Kripya apna naam aur kis zaroori kaam se call kiya hai batayein?"
+                "${greet}main ALI AI bol raha hoon — $bossTitle ka personal assistant. $bossTitle $statusHindi isliye maine call receive kiya hai. Kripya apna naam aur kis zaroori kaam se call kiya hai batayein?"
             }
             AssistantLanguage.HINDI -> {
                 val greet = if (hasKnownCaller) "नमस्ते $callerClean जी, " else "नमस्ते, "
-                "${greet}मैं LEON AI बोल रहा हूँ — $bossTitle का पर्सनल असिस्टेंट। वे $statusHindi, इसलिए मैंने आपकी कॉल रिसीव की है। कृपया बताइए, आपका शुभ नाम क्या है और किस ज़रूरी काम से कॉल किया है?"
+                "${greet}मैं ALI AI बोल रहा हूँ — $bossTitle का पर्सनल असिस्टेंट। वे $statusHindi, इसलिए मैंने आपकी कॉल रिसीव की है। कृपया बताइए, आपका शुभ नाम क्या है और किस ज़रूरी काम से कॉल किया है?"
             }
         }
     }
@@ -103,7 +103,7 @@ object CallReceptionistEngine {
         // Security guard: never handle OTP / password / sensitive financial verification on call
         if (isOtpOrVerification) {
             val reply = if (preferEnglish) {
-                "For security reasons, LEON AI cannot verify OTPs or banking details over the phone. $bossTitle will review this personally if genuine. Thank you, goodbye."
+                "For security reasons, ALI AI cannot verify OTPs or banking details over the phone. $bossTitle will review this personally if genuine. Thank you, goodbye."
             } else {
                 "माफ़ कीजिए, सुरक्षा कारणों से मैं कॉल पर कोई OTP या बैंकिंग जानकारी साझा नहीं कर सकता। ज़रूरी होने पर $bossTitle स्वयं संपर्क करेंगे। धन्यवाद।"
             }

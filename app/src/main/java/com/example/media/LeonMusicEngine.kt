@@ -37,7 +37,7 @@ object LeonMusicEngine {
 
     private val presets = listOf(
         AmbientTrackPreset(
-            name = "LEON Cyber Calm",
+            name = "ALI Cyber Calm",
             chordsHz = listOf(
                 floatArrayOf(220.0f, 261.63f, 329.63f, 392.00f),
                 floatArrayOf(174.61f, 220.00f, 261.63f, 329.63f),
@@ -282,7 +282,7 @@ object LeonMusicEngine {
             session.setMetadata(
                 MediaMetadata.Builder()
                     .putString(MediaMetadata.METADATA_KEY_TITLE, currentTrackName())
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "LEON × ALI AI")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "ALI AI")
                     .putString(MediaMetadata.METADATA_KEY_ALBUM, "Lock-Screen Ambient Audio")
                     .build()
             )

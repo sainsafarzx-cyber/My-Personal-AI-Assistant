@@ -148,7 +148,7 @@ fun LifeCompassScreen(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = "Back to LEON HUD",
+                        contentDescription = "Back to ALI AI HUD",
                         tint = ArcCyan
                     )
                 }
@@ -277,7 +277,7 @@ fun LifeCompassScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.size(8.dp))
-                            Text("LEON इंसान की तरह गहराई से सोच रहा है...")
+                            Text("ALI AI इंसान की तरह गहराई से सोच रहा है...")
                         } else {
                             Icon(Icons.Rounded.Explore, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.size(8.dp))
@@ -460,7 +460,7 @@ private fun ProactiveGuidanceCard(
                 }
             } else {
                 Text(
-                    text = "LEON आपकी दिनचर्या और ज़रूरतों का विश्लेषण कर रहा है...",
+                    text = "ALI AI आपकी दिनचर्या और ज़रूरतों का विश्लेषण कर रहा है...",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

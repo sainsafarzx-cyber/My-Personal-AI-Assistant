@@ -54,7 +54,7 @@ object PublicKnowledgeFallback {
         val cleaned = rawPrompt
             .trim()
             .replace(
-                Regex("(?i)^(?:hey|hi|ok|hello|हे|हाय|सुनो|लियोन|लिऑन|leon|ali|अली)[,\\s]+"),
+                Regex("(?i)^(?:hey|hi|ok|hello|हे|हाय|सुनो|ali|अली)[,\\s]+"),
                 ""
             )
             .replace(
@@ -110,7 +110,7 @@ object PublicKnowledgeFallback {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "LEON-AI-Assistant/1.0 (Android)")
+                setRequestProperty("User-Agent", "ALI-AI-Assistant/1.0 (Android)")
             }
             if (conn.responseCode !in 200..299) return null
             val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }

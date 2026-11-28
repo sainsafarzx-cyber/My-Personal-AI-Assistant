@@ -214,7 +214,7 @@ object LocalCommandRouter {
                 )
             }
             lower.contains("सुन रहे") || lower.contains("आवाज आ रही") || lower.contains("आवाज़ आ रही") ||
-                lower.contains("can you hear") || lower.contains("hello leon") || lower.contains("हेल्लो") ||
+                lower.contains("can you hear") || lower.contains("hello ali") || lower.contains("हेल्लो") ||
                 lower.contains("बोल क्यों नहीं") || lower.contains("बात करो") || lower.contains("काम नहीं कर") -> {
                 AliBrainResult(
                     replyText = "जी $boss, आपकी आवाज़ बिल्कुल साफ़ आ रही है और मैं सक्रिय हूँ! बोलिए क्या काम करना है?",
@@ -233,7 +233,7 @@ object LocalCommandRouter {
             }
             lower.contains("बाय") || lower == "bye" || lower.contains("goodbye") || lower.contains("अलविदा") -> {
                 AliBrainResult(
-                    replyText = "ठीक है $boss, जब भी ज़रूरत हो बस 'Hey Leon' बोलिएगा। आपका दिन शुभ रहे!",
+                    replyText = "ठीक है $boss, जब भी ज़रूरत हो बस 'Hey Ali' बोलिएगा। आपका दिन शुभ रहे!",
                     spokenLanguage = AssistantLanguage.HINDI,
                     actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
                     suggestions = listOf("समय बताओ", "गाना बजाओ")
@@ -286,7 +286,7 @@ object LocalCommandRouter {
 
         if (asksOwnerOrCreator) {
             val reply = if (ownerName.isNotBlank()) {
-                "मैं LEON AI (powered by ALI AI) हूँ — मेरे मालिक और क्रिएटर $ownerName बॉस हैं! कोई भी इस ऐप को डाउनलोड या इस्तेमाल करेगा, तो मैं उसे गर्व से $ownerName जी का ही नाम बताऊँगा।"
+                "मैं अली (ALI AI) हूँ — मेरे मालिक और क्रिएटर $ownerName बॉस हैं! कोई भी इस ऐप को डाउनलोड या इस्तेमाल करेगा, तो मैं उसे गर्व से $ownerName जी का ही नाम बताऊँगा।"
             } else {
                 "बॉस, अभी आपका नाम सेव नहीं है। बस एक बार बताइए — 'मेरा नाम [आपका नाम] है' — मैं इसे हमेशा के लिए याद रखूँगा और हर नए डाउनलोड पर आपका ही नाम बताऊँगा!"
             }
@@ -362,7 +362,7 @@ object LocalCommandRouter {
 
         // 4. Explicit One-Tell Forever Remember command
         val rememberRegex = Regex(
-            pattern = "(?i)^(?:प्लीज\\s+|please\\s+|लियोन\\s+|leon\\s+)?(?:हमेशा\\s+(?:के\\s+लिए\\s+)?याद\\s+(?:रखो|रखना|कर\\s*लो)|एक\\s+बार\\s+(?:में\\s+)?याद\\s+(?:रखो|कर\\s*लो)|याद\\s+(?:रखो|रखना|कर\\s*लो)|इसे\\s+(?:हमेशा\\s+)?(?:याद|सेव)\\s+(?:रखो|कर\\s*लो)|always\\s+remember|remember\\s+forever|never\\s+forget|remember\\s+that|remember|yaad\\s+rakh(?:o|na))\\s*(?:कि|ke|that|:|-)?\\s*(.+)$"
+            pattern = "(?i)^(?:प्लीज\\s+|please\\s+|अली\\s+|ali\\s+)?(?:हमेशा\\s+(?:के\\s+लिए\\s+)?याद\\s+(?:रखो|रखना|कर\\s*लो)|एक\\s+बार\\s+(?:में\\s+)?याद\\s+(?:रखो|कर\\s*लो)|याद\\s+(?:रखो|रखना|कर\\s*लो)|इसे\\s+(?:हमेशा\\s+)?(?:याद|सेव)\\s+(?:रखो|कर\\s*लो)|always\\s+remember|remember\\s+forever|never\\s+forget|remember\\s+that|remember|yaad\\s+rakh(?:o|na))\\s*(?:कि|ke|that|:|-)?\\s*(.+)$"
         )
         val remMatch = rememberRegex.find(clean)
         if (remMatch != null) {
@@ -429,11 +429,11 @@ object LocalCommandRouter {
     ): AliBrainResult? {
         // 1. Wake / Greetings / Assistant Intro
         if (lower in setOf(
-                "hey leon", "hi leon", "ok leon", "hello leon", "hey ali", "ok ali",
-                "हे लियोन", "हे लिऑन", "नमस्ते", "namaste", "hi", "hello", "हेलो", "हाय",
+                "hey ali", "hi ali", "ok ali", "hello ali",
+                "हे अली", "हाय अली", "ओके अली", "नमस्ते", "namaste", "hi", "hello", "हेलो", "हाय",
                 "सलाम", "salam", "अस्सलाम वालेकुम", "सुनो", "बोलो", "सुनाओ", "ठीक है", "अच्छा",
                 "कैसे हो", "कैसे हैं", "कैसा है", "कैसी हो", "क्या हाल है", "क्या हाल", "kaise ho", "how are you",
-                "leon", "ali", "अली", "लियोन", "ओ लियोन", "अरे लियोन", "लियोन भाई", "टेस्ट", "test"
+                "ali", "अली", "ओ अली", "अरे अली", "अली भाई", "टेस्ट", "test"
             )
         ) {
             val bossLabel = if (ownerName.isNotBlank()) "$ownerName बॉस" else "बॉस"
@@ -469,7 +469,7 @@ object LocalCommandRouter {
             val bossLabel = if (ownerName.isNotBlank()) "$ownerName बॉस" else "बॉस"
             val ownerLine = if (ownerName.isNotBlank()) " मेरे क्रिएटर $ownerName जी हैं।" else ""
             return AliBrainResult(
-                replyText = "जी $bossLabel, मैं LEON AI (powered by ALI AI) हूँ!$ownerLine मैं किसी को फ़ोन कॉल लगाने, कॉल रिसीव असिस्टेंट चलाने, टॉर्च/ब्राइटनेस/वॉल्यूम/Wi-Fi कंट्रोल करने, ऐप्स व YouTube खोलने, लॉक-स्क्रीन म्यूजिक व टाइमर, ताज़ा न्यूज़, कैमरा से चीज़ पहचानने और आपकी बातें हमेशा के लिए याद रखने का काम कर सकता हूँ।",
+                replyText = "जी $bossLabel, मैं अली (ALI AI) हूँ!$ownerLine मैं किसी को फ़ोन कॉल लगाने, कॉल रिसीव असिस्टेंट चलाने, टॉर्च/ब्राइटनेस/वॉल्यूम/Wi-Fi कंट्रोल करने, ऐप्स व YouTube खोलने, लॉक-स्क्रीन म्यूजिक व टाइमर, ताज़ा न्यूज़, कैमरा से चीज़ पहचानने और आपकी बातें हमेशा के लिए याद रखने का काम कर सकता हूँ।",
                 spokenLanguage = AssistantLanguage.HINDI,
                 actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
                 suggestions = listOf("फ्लैशलाइट ऑन करो", "गाना बजाओ", "समय बताओ")
@@ -718,7 +718,7 @@ object LocalCommandRouter {
             return AliBrainResult(
                 replyText = "जी बॉस, $labelText का टाइमर शुरू कर दिया है।",
                 spokenLanguage = AssistantLanguage.HINDI,
-                actions = listOf(DeviceAction(ActionType.SET_TIMER, target = "LEON Timer", payload = totalSeconds.toString())),
+                actions = listOf(DeviceAction(ActionType.SET_TIMER, target = "ALI Timer", payload = totalSeconds.toString())),
                 suggestions = listOf("गाना बजाओ", "बैटरी बताओ")
             )
         }
@@ -796,7 +796,7 @@ object LocalCommandRouter {
         // 12b. Offline Camera Object Recognition & Visual Understanding (works without internet)
         val asksOfflineCameraVision = lower.contains("offline vision") ||
             lower.contains("offline camera") ||
-            lower.contains("leon eye") ||
+            lower.contains("ali eye") ||
             lower.contains("camera vision") ||
             lower.contains("object detect") ||
             lower.contains("scan object") ||
@@ -823,7 +823,7 @@ object LocalCommandRouter {
                 replyText = if (isDeviceLocked) {
                     "$bossLabel, फ़ोन लॉक है — कैमरा से चीज़ पहचानने के लिए पहले फ़ोन अनलॉक करें।"
                 } else {
-                    "जी $bossLabel, बिना इंटरनेट काम करने वाला LEON Offline Eye कैमरा खोल रहा हूँ — बस किसी भी चीज़, लिखावट या QR की तरफ़ कैमरा रखें!"
+                    "जी $bossLabel, बिना इंटरनेट काम करने वाला ALI Offline Eye कैमरा खोल रहा हूँ — बस किसी भी चीज़, लिखावट या QR की तरफ़ कैमरा रखें!"
                 },
                 spokenLanguage = AssistantLanguage.HINDI,
                 actions = if (isDeviceLocked) listOf(DeviceAction(ActionType.SPEAK_ONLY)) else listOf(DeviceAction(ActionType.OPEN_OFFLINE_VISION)),
@@ -915,9 +915,9 @@ object LocalCommandRouter {
         }
 
         var target = clean
-            .replace(Regex("(?i)^(?:hey|hi|ok|hello|हे|हाय|ओके)\\s+(?:leon|लियोन|लिऑन|ali|अली)[,\\s]*"), "")
-            .replace(Regex("(?i)\\b(?:please|pls|kindly|make\\s+a|place\\s+a|give\\s+a|do\\s+a|to|for|me|a|an|on|at|ko|par|pe|se|ka|ki|lagao|laga|karo|karna|kardo|kar\\s+do|mila|milao|phone|call|dial|ring|leon|ali)\\b"), " ")
-            .replace(Regex("(?:प्लीज|कृपया|जरा|ज़रा|एक\\s+बार|लियोन|लिऑन|अली|को|पर|पे|से|का|की|कॉल|काल|फोन|फ़ोन|डायल|लगाओ|लगा|लगाना|लगा\\s+दो|करो|करना|कर\\s+दो|मिलाओ|मिला)"), " ")
+            .replace(Regex("(?i)^(?:hey|hi|ok|hello|हे|हाय|ओके)\\s+(?:ali|अली)[,\\s]*"), "")
+            .replace(Regex("(?i)\\b(?:please|pls|kindly|make\\s+a|place\\s+a|give\\s+a|do\\s+a|to|for|me|a|an|on|at|ko|par|pe|se|ka|ki|lagao|laga|karo|karna|kardo|kar\\s+do|mila|milao|phone|call|dial|ring|ali)\\b"), " ")
+            .replace(Regex("(?:प्लीज|कृपया|जरा|ज़रा|एक\\s+बार|अली|को|पर|पे|से|का|की|कॉल|काल|फोन|फ़ोन|डायल|लगाओ|लगा|लगाना|लगा\\s+दो|करो|करना|कर\\s+दो|मिलाओ|मिला)"), " ")
             .replace(Regex("\\s+"), " ")
             .trim(' ', ',', '.', '!', '?', '।', ':', '-', '"', '\'')
 
@@ -937,11 +937,7 @@ object LocalCommandRouter {
             )
         }
 
-        val reply = if (isDeviceLocked) {
-            "जी $bossLabel, $target को कॉल लगा रहा हूँ।"
-        } else {
-            "जी $bossLabel, $target को कॉल लगाने के लिए तैयार हूँ।"
-        }
+        val reply = "जी $bossLabel, $target को कॉल लगा रहा हूँ।"
         return AliBrainResult(
             replyText = reply,
             spokenLanguage = AssistantLanguage.HINDI,
@@ -949,7 +945,7 @@ object LocalCommandRouter {
                 DeviceAction(
                     type = ActionType.MAKE_CALL,
                     target = target,
-                    requiresConfirmation = !isDeviceLocked,
+                    requiresConfirmation = false,
                     confirmationReason = "$target को फ़ोन कॉल लगाएँ?"
                 )
             ),
@@ -1189,7 +1185,7 @@ object LocalCommandRouter {
         }
 
         return AliBrainResult(
-            replyText = "जी $bossLabel, $platformNames पर ${postType.hindiLabel} अपने आप पोस्ट करने के लिए LEON Social Auto-Poster खोल रहा हूँ — बस वीडियो/फोटो चुनिए!",
+            replyText = "जी $bossLabel, $platformNames पर ${postType.hindiLabel} अपने आप पोस्ट करने के लिए ALI Social Auto-Poster खोल रहा हूँ — बस वीडियो/फोटो चुनिए!",
             spokenLanguage = AssistantLanguage.HINDI,
             actions = listOf(DeviceAction(ActionType.SOCIAL_AUTO_POST, target = target, payload = payload)),
             suggestions = listOf("इंस्टाग्राम पर वीडियो पोस्ट करो", "व्हाट्सएप स्टेटस डालो")
@@ -1274,7 +1270,7 @@ object LocalCommandRouter {
         val reply = if (isDeviceLocked) {
             "$bossLabel, फ़ोन लॉक है — AI Call Receptionist सेटिंग खोलने के लिए फ़ोन अनलॉक करें। चालू करने के बाद यह अनअटेंडेड कॉल्स पर अपने आप बात करेगा।"
         } else {
-            "जी $bossLabel, LEON AI Call Receptionist खोल रहा हूँ — अब जब आप कोई कॉल रिसीव नहीं कर पाएँगे, तो मैं विनम्रता से कॉलर से बात करके पूरी रिपोर्ट सेव कर लूँगा!"
+            "जी $bossLabel, ALI AI Call Receptionist खोल रहा हूँ — अब जब आप कोई कॉल रिसीव नहीं कर पाएँगे, तो मैं विनम्रता से कॉलर से बात करके पूरी रिपोर्ट सेव कर लूँगा!"
         }
         return AliBrainResult(
             replyText = reply,

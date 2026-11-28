@@ -79,7 +79,7 @@ object LiveNewsEngine {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "LEON-AI-NewsReader/1.0")
+                setRequestProperty("User-Agent", "ALI-AI-NewsReader/1.0")
             }
             val code = conn.responseCode
             if (code !in 200..299) {

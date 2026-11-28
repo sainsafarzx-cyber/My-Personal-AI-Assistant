@@ -218,7 +218,7 @@ fun OfflineVisionScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "LEON OFFLINE EYE",
+                        text = "ALI OFFLINE EYE",
                         style = MaterialTheme.typography.titleMedium,
                         color = ArcCyan,
                         fontWeight = FontWeight.Bold,

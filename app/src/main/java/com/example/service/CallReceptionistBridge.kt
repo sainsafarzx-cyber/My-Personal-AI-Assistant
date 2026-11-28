@@ -92,7 +92,7 @@ object CallReceptionistBridge {
                 capturedCallerName = "",
                 capturedPurpose = "",
                 capturedUrgency = "MEDIUM",
-                statusBanner = "कॉल आ रही है — ${delaySeconds}s में उत्तर न मिलने पर LEON AI रिसीव करेगा।"
+                statusBanner = "कॉल आ रही है — ${delaySeconds}s में उत्तर न मिलने पर ALI AI रिसीव करेगा।"
             )
         }
     }
@@ -120,7 +120,7 @@ object CallReceptionistBridge {
                 countdownSeconds = 0,
                 activeTurns = listOf(
                     CallTranscriptTurn(
-                        speaker = "LEON AI",
+                        speaker = "ALI AI",
                         text = initialGreeting
                     )
                 ),
@@ -130,7 +130,7 @@ object CallReceptionistBridge {
                 statusBanner = if (isSimulation) {
                     "Live Call Simulator सक्रिय — नीचे कॉलर की तरह संदेश लिखकर टेस्ट करें।"
                 } else {
-                    "LEON AI ने कॉल रिसीव कर ली है और कॉलर से बात कर रहा है।"
+                    "ALI AI ने कॉल रिसीव कर ली है और कॉलर से बात कर रहा है।"
                 }
             )
         }
@@ -165,7 +165,7 @@ object CallReceptionistBridge {
                 } else {
                     current.activeCallCaller
                 },
-                activeTurns = current.activeTurns + CallTranscriptTurn(speaker = "LEON AI", text = replyText),
+                activeTurns = current.activeTurns + CallTranscriptTurn(speaker = "ALI AI", text = replyText),
                 capturedCallerName = resolvedName,
                 capturedPurpose = resolvedPurpose,
                 capturedUrgency = urgency,

@@ -61,7 +61,7 @@ class ExampleRobolectricTest {
     @Test
     fun `read app name and wake greeting from context`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        assertEquals("LEON AI", context.getString(R.string.app_name))
+        assertEquals("ALI AI", context.getString(R.string.app_name))
         assertEquals(
             "जी बॉस! बताइए, मैं आपकी क्या मदद कर सकता हूँ?",
             context.getString(R.string.default_greeting_hi)
@@ -78,7 +78,7 @@ class ExampleRobolectricTest {
 
         composeRule.onNodeWithTag("nav_control").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("LEON CONTROL DECK").assertIsDisplayed()
+        composeRule.onNodeWithText("ALI AI CONTROL DECK").assertIsDisplayed()
         composeRule.onNodeWithText("SMARTPHONE CONTROLS").assertIsDisplayed()
         composeRule.onNodeWithTag("music_toggle_button").assertIsDisplayed()
         composeRule.onNodeWithTag("music_next_button").assertIsDisplayed()
@@ -111,9 +111,9 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `submitting Hey Leon renders default Hindi boss greeting`() {
+    fun `submitting Hey Ali renders default Hindi boss greeting`() {
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("command_input").performTextInput("Hey Leon")
+        composeRule.onNodeWithTag("command_input").performTextInput("Hey Ali")
         composeRule.onNodeWithTag("send_command_button").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("जी बॉस! बताइए, मैं आपकी क्या मदद कर सकता हूँ?")
@@ -341,7 +341,7 @@ class ExampleRobolectricTest {
         assertEquals("300", timer?.actions?.firstOrNull()?.payload)
 
         val offlineYt = LocalCommandRouter.tryFallback(
-            rawPrompt = "YouTube पर लियोन सॉन्ग सर्च करो",
+            rawPrompt = "YouTube पर अली सॉन्ग सर्च करो",
             defaultLanguage = AssistantLanguage.HINDI,
             telemetry = telemetry,
             notifications = emptyList(),
@@ -602,7 +602,7 @@ class ExampleRobolectricTest {
 
         // 5. Personalized wake greeting uses saved owner name
         val ownerGreet = LocalCommandRouter.tryFastPath(
-            rawPrompt = "Hey Leon",
+            rawPrompt = "Hey Ali",
             defaultLanguage = AssistantLanguage.HINDI,
             telemetry = telemetry,
             notifications = emptyList(),
@@ -665,7 +665,7 @@ class ExampleRobolectricTest {
             ownerName = "अली"
         )
         assertNotNull(intro)
-        assertTrue(intro!!.replyText.contains("LEON AI"))
+        assertTrue(intro!!.replyText.contains("ALI AI"))
         assertTrue(intro.replyText.contains("अली"))
     }
 
@@ -1218,14 +1218,14 @@ class ExampleRobolectricTest {
             config = config,
             language = AssistantLanguage.HINDI
         )
-        assertTrue(greeting.contains("LEON AI"))
+        assertTrue(greeting.contains("ALI AI"))
         assertTrue(greeting.contains("अली"))
         assertTrue(greeting.contains("मीटिंग"))
 
         val turn1 = CallReceptionistEngine.generateOfflineTurn(
             callerDisplay = "अज्ञात कॉलर",
             callerUtterance = "मैं राहुल बोल रहा हूँ, कल सुबह 10 बजे मीटिंग के लिए कॉल किया है",
-            priorTurns = listOf(CallTranscriptTurn("LEON AI", greeting)),
+            priorTurns = listOf(CallTranscriptTurn("ALI AI", greeting)),
             ownerName = "अली",
             config = config,
             language = AssistantLanguage.HINDI
@@ -1366,7 +1366,7 @@ class ExampleRobolectricTest {
             tasks = emptyList(),
             ownerName = "अली"
         )
-        assertTrue(capabilityFeminine?.replyText?.contains("LEON AI") == true)
+        assertTrue(capabilityFeminine?.replyText?.contains("ALI AI") == true)
         assertTrue(capabilityFeminine?.replyText?.contains("अली") == true)
 
         assertEquals(
@@ -1377,5 +1377,67 @@ class ExampleRobolectricTest {
             """{"query":{"pages":{"123":{"title":"ताजमहल","extract":"ताजमहल भारत के आगरा शहर में स्थित एक विश्व धरोहर मक़बरा है।"}}}}"""
         )
         assertTrue(parsedWiki?.contains("आगरा") == true)
+    }
+
+    @Test
+    fun continuousVoiceConversationStaysActiveUntilStopped() {
+        com.example.service.VoiceServiceBridge.setRunning(false)
+        com.example.service.VoiceServiceBridge.setForegroundMicActive(false)
+        com.example.service.VoiceServiceBridge.setOrbState(com.example.service.VoiceOrbState.ACTIVE_LISTENING)
+        com.example.service.VoiceServiceBridge.setContinuousConversationActive(true)
+        assertTrue(com.example.service.VoiceServiceBridge.continuousConversationActive.value)
+        assertEquals(
+            com.example.service.VoiceOrbState.ACTIVE_LISTENING,
+            com.example.service.VoiceServiceBridge.orbState.value
+        )
+
+        // Submitting Hindi stop command turns off continuous conversation and resets Orb state
+        composeRule.onNodeWithTag("command_input").performTextInput("स्टॉप")
+        composeRule.onNodeWithTag("send_command_button").performClick()
+        composeRule.waitForIdle()
+
+        assertFalse(com.example.service.VoiceServiceBridge.continuousConversationActive.value)
+        assertEquals(
+            com.example.service.VoiceOrbState.IDLE,
+            com.example.service.VoiceServiceBridge.orbState.value
+        )
+    }
+
+    @Test
+    fun oneTimePermissionsAndPersistentServiceSurviveSwipeUntilStopped() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        // One-time batch permission list covers all runtime features in one ask
+        val corePerms = com.example.core.LeonRuntimePrefs.coreRuntimePermissions()
+        assertTrue(corePerms.contains(android.Manifest.permission.RECORD_AUDIO))
+        assertTrue(corePerms.contains(android.Manifest.permission.CALL_PHONE))
+        assertTrue(corePerms.contains(android.Manifest.permission.READ_CONTACTS))
+        assertTrue(corePerms.contains(android.Manifest.permission.CAMERA))
+
+        com.example.core.LeonRuntimePrefs.setOneTimePermissionsAsked(context, true)
+        assertTrue(com.example.core.LeonRuntimePrefs.isOneTimePermissionsAsked(context))
+
+        // Persist active Always-Ready + Continuous state for task swipe / null-intent START_STICKY recovery
+        com.example.core.LeonRuntimePrefs.setAlwaysReadyActive(context, true)
+        com.example.core.LeonRuntimePrefs.setContinuousModeActive(context, true)
+        assertTrue(com.example.core.LeonRuntimePrefs.isAlwaysReadyActive(context))
+        assertTrue(com.example.core.LeonRuntimePrefs.isContinuousModeActive(context))
+
+        // Direct voice call executes without asking Confirm/Cancel popup repeatedly even when unlocked
+        val unlockedCall = LocalCommandRouter.tryFastPath(
+            rawPrompt = "पापा को कॉल लगाओ",
+            defaultLanguage = AssistantLanguage.HINDI,
+            telemetry = DeviceTelemetry(batteryPercent = 85),
+            notifications = emptyList(),
+            tasks = emptyList(),
+            isDeviceLocked = false
+        )
+        assertEquals(ActionType.MAKE_CALL, unlockedCall?.actions?.firstOrNull()?.type)
+        assertFalse(unlockedCall!!.actions.first().requiresConfirmation)
+
+        // Explicit stopVoiceOnly clears persistent recovery flags
+        com.example.service.LeonVoiceService.stopVoiceOnly(context)
+        assertFalse(com.example.core.LeonRuntimePrefs.isAlwaysReadyActive(context))
+        assertFalse(com.example.core.LeonRuntimePrefs.isContinuousModeActive(context))
     }
 }

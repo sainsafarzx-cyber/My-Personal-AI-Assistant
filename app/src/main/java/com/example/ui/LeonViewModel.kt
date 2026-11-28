@@ -18,6 +18,7 @@ import com.example.ai.LocalCommandRouter
 import com.example.ai.PublicKnowledgeFallback
 import com.example.audio.LeonSpeaker
 import com.example.automation.LeonActionExecutor
+import com.example.core.LeonRuntimePrefs
 import com.example.data.ActionType
 import com.example.data.AirGestureAction
 import com.example.data.AssistantLanguage
@@ -143,6 +144,7 @@ class LeonViewModel(
     val orbState: StateFlow<VoiceOrbState> = VoiceServiceBridge.orbState
     val partialTranscript: StateFlow<String> = VoiceServiceBridge.partialTranscript
     val alwaysReadyRunning: StateFlow<Boolean> = VoiceServiceBridge.alwaysReadyRunning
+    val continuousConversationActive: StateFlow<Boolean> = VoiceServiceBridge.continuousConversationActive
     val musicPlaying: StateFlow<Boolean> = VoiceServiceBridge.musicPlaying
     val activeTimerSeconds: StateFlow<Int> = VoiceServiceBridge.activeTimerRemainingSeconds
     val notifications: StateFlow<List<CapturedNotification>> = NotificationBridge.notifications
@@ -158,7 +160,7 @@ class LeonViewModel(
 
     private val _suggestions = MutableStateFlow(
         listOf(
-            "Hey Leon",
+            "Hey Ali",
             "कैमरा से पहचानो",
             "मेरा नाम याद रखो",
             "गाना बजाओ"
@@ -260,13 +262,17 @@ class LeonViewModel(
                 appContext,
                 Manifest.permission.RECORD_AUDIO
             ) == PackageManager.PERMISSION_GRANTED
-            if (prefs.alwaysReadyEnabled && micGranted && !VoiceServiceBridge.alwaysReadyRunning.value) {
+            val shouldRestoreAlwaysReady = prefs.alwaysReadyEnabled || LeonRuntimePrefs.isAlwaysReadyActive(appContext)
+            if (shouldRestoreAlwaysReady && micGranted && !VoiceServiceBridge.alwaysReadyRunning.value) {
+                val restoredContinuous = LeonRuntimePrefs.isContinuousModeActive(appContext)
+                VoiceServiceBridge.setContinuousConversationActive(restoredContinuous)
                 withContext(Dispatchers.Main) {
                     LeonVoiceService.startAlwaysReady(
                         appContext,
                         AssistantLanguage.fromCode(prefs.defaultLanguage),
                         prefs.voiceSpeed.toFloat().coerceIn(0.5f, 2.0f),
-                        prefs.lockScreenModeEnabled
+                        prefs.lockScreenModeEnabled,
+                        continuousMode = restoredContinuous
                     )
                 }
             }
@@ -360,12 +366,62 @@ class LeonViewModel(
         VoiceServiceBridge.setForegroundMicActive(false)
         VoiceServiceBridge.setPartialTranscript("")
         if (!capturedTranscript) {
-            if (VoiceServiceBridge.alwaysReadyRunning.value) {
-                LeonVoiceService.notifyProcessingComplete(appContext)
-            } else {
-                VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
+            when {
+                VoiceServiceBridge.alwaysReadyRunning.value -> {
+                    LeonVoiceService.notifyProcessingComplete(appContext)
+                }
+                VoiceServiceBridge.continuousConversationActive.value -> {
+                    VoiceServiceBridge.setOrbState(VoiceOrbState.ACTIVE_LISTENING)
+                }
+                else -> {
+                    VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
+                }
             }
         }
+    }
+
+    fun setContinuousConversationActive(active: Boolean) {
+        LeonRuntimePrefs.setContinuousModeActive(appContext, active)
+        VoiceServiceBridge.setContinuousConversationActive(active)
+    }
+
+    fun startPersistentVoiceConversation() {
+        val prefs = currentPreferences()
+        val lang = AssistantLanguage.fromCode(prefs.defaultLanguage)
+        val speed = prefs.voiceSpeed.toFloat().coerceIn(0.5f, 2.0f)
+        LeonRuntimePrefs.setContinuousModeActive(appContext, true)
+        LeonRuntimePrefs.setAlwaysReadyActive(appContext, true)
+        VoiceServiceBridge.setContinuousConversationActive(true)
+        viewModelScope.launch {
+            repository.updatePreferences(alwaysReadyEnabled = true)
+        }
+        if (LeonRuntimePrefs.hasMicPermission(appContext)) {
+            LeonVoiceService.startAlwaysReady(
+                context = appContext,
+                language = lang,
+                speed = speed,
+                lockScreenMode = prefs.lockScreenModeEnabled,
+                continuousMode = true
+            )
+        }
+    }
+
+    fun stopVoiceConversation() {
+        LeonRuntimePrefs.setContinuousModeActive(appContext, false)
+        LeonRuntimePrefs.setAlwaysReadyActive(appContext, false)
+        VoiceServiceBridge.setContinuousConversationActive(false)
+        VoiceServiceBridge.setForegroundMicActive(false)
+        VoiceServiceBridge.setPartialTranscript("")
+        LeonSpeaker.stop(notifyIdle = false)
+        viewModelScope.launch {
+            repository.updatePreferences(alwaysReadyEnabled = false)
+        }
+        if (VoiceServiceBridge.alwaysReadyRunning.value) {
+            LeonVoiceService.stopVoiceOnly(appContext)
+        } else {
+            VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
+        }
+        _statusBanner.value = "वॉइस बातचीत रोक दी गई है।"
     }
 
     fun updateForegroundOrbListening(state: VoiceOrbState, partial: String = "") {
@@ -377,13 +433,24 @@ class LeonViewModel(
         val prefs = currentPreferences()
         val lang = AssistantLanguage.fromCode(prefs.defaultLanguage)
         val speed = prefs.voiceSpeed.toFloat().coerceIn(0.5f, 2.0f)
+        LeonRuntimePrefs.setAlwaysReadyActive(appContext, enable)
+        if (!enable) {
+            LeonRuntimePrefs.setContinuousModeActive(appContext, false)
+            VoiceServiceBridge.setContinuousConversationActive(false)
+        }
         viewModelScope.launch {
             repository.updatePreferences(alwaysReadyEnabled = enable)
         }
         if (enable) {
-            LeonVoiceService.startAlwaysReady(appContext, lang, speed, prefs.lockScreenModeEnabled)
+            LeonVoiceService.startAlwaysReady(
+                context = appContext,
+                language = lang,
+                speed = speed,
+                lockScreenMode = prefs.lockScreenModeEnabled,
+                continuousMode = LeonRuntimePrefs.isContinuousModeActive(appContext)
+            )
         } else {
-            LeonVoiceService.emergencyStop(appContext)
+            LeonVoiceService.stopVoiceOnly(appContext)
         }
     }
 
@@ -395,7 +462,7 @@ class LeonViewModel(
             LeonVoiceService.setLockScreenMode(appContext, enabled)
         }
         _statusBanner.value = if (enabled) {
-            "Lock-Screen Mode enabled: LEON stays responsive after screen lock."
+            "Lock-Screen Mode enabled: ALI AI stays responsive after screen lock."
         } else {
             "Lock-Screen Mode paused: voice stops when screen locks."
         }
@@ -431,6 +498,9 @@ class LeonViewModel(
         _isThinking.value = false
         _pendingConfirmation.value = null
         _lifeCompassState.value = _lifeCompassState.value.copy(isThinking = false, isAutoThinking = false)
+        LeonRuntimePrefs.setContinuousModeActive(appContext, false)
+        LeonRuntimePrefs.setAlwaysReadyActive(appContext, false)
+        VoiceServiceBridge.setContinuousConversationActive(false)
         LeonSpeaker.stop()
         LeonVoiceService.emergencyStop(appContext)
         SocialAutoPosterBridge.clearJob()
@@ -454,14 +524,14 @@ class LeonViewModel(
         if (!next) {
             LeonSpeaker.stop()
         }
-        _statusBanner.value = if (next) "Voice replies ON — LEON will speak aloud." else "Voice replies muted."
+        _statusBanner.value = if (next) "Voice replies ON — ALI AI will speak aloud." else "Voice replies muted."
     }
 
     fun speakMessage(text: String, languageCode: String = currentLanguage().code) {
         if (text.isBlank()) return
         _voiceRepliesEnabled.value = true
         if (LeonSpeaker.isMediaStreamMuted(appContext)) {
-            _statusBanner.value = "फ़ोन का Media Volume 0% है — LEON की आवाज़ सुनने के लिए Volume बढ़ाएं!"
+            _statusBanner.value = "फ़ोन का Media Volume 0% है — ALI AI की आवाज़ सुनने के लिए Volume बढ़ाएं!"
         }
         LeonSpeaker.speak(
             context = appContext,
@@ -491,7 +561,7 @@ class LeonViewModel(
         val isLocked = km?.isKeyguardLocked == true
         if (!isLocked && (forceForeground || VoiceServiceBridge.foregroundUiActive.value)) {
             if (LeonSpeaker.isMediaStreamMuted(appContext)) {
-                _statusBanner.value = "फ़ोन का Media Volume 0% है — LEON की आवाज़ सुनने के लिए Volume बढ़ाएं!"
+                _statusBanner.value = "फ़ोन का Media Volume 0% है — ALI AI की आवाज़ सुनने के लिए Volume बढ़ाएं!"
             }
             LeonSpeaker.speak(appContext, text, language, speed, queueMode)
         } else {
@@ -508,7 +578,11 @@ class LeonViewModel(
         if (clean.isEmpty()) return
 
         val lower = clean.lowercase().trimEnd('.', '!', '?', '।')
-        if (lower == "stop" || lower == "emergency stop" || lower == "रुको" || lower == "बंद करो") {
+        if (lower in setOf(
+                "stop", "emergency stop", "stop listening", "ali stop", "अली बंद करो",
+                "रुको", "बंद करो", "स्टॉप", "चुप", "चुप हो जाओ", "बस करो", "बंद हो जाओ"
+            )
+        ) {
             emergencyStop()
             return
         }
@@ -668,7 +742,11 @@ class LeonViewModel(
             )
         }
         if (memoryConsentGranted && brainResult.memoryProposal != null) {
-            _pendingMemoryProposal.value = brainResult.memoryProposal
+            val proposal = brainResult.memoryProposal
+            withContext(Dispatchers.IO) {
+                repository.saveMemory(proposal.key, proposal.value, proposal.category, isPermanent = true)
+                    .onSuccess { saved -> cloudSync?.pushMemoryToCloud(saved) }
+            }
         }
 
         val actionSummary = brainResult.actions
@@ -847,7 +925,7 @@ class LeonViewModel(
             }
             ActionType.SET_TIMER -> {
                 val secs = action.payload.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 86400) ?: 60
-                val label = action.target.ifBlank { "LEON Timer" }
+                val label = action.target.ifBlank { "ALI Timer" }
                 LeonVoiceService.startBackgroundTimer(appContext, secs, label)
                 if (!isLocked) {
                     withContext(Dispatchers.IO) { executor.execute(action) }
@@ -959,12 +1037,12 @@ class LeonViewModel(
             }
             ActionType.OPEN_OFFLINE_VISION -> {
                 _openOfflineVisionTrigger.value += 1
-                "Opened LEON Offline Eye Camera"
+                "Opened ALI Offline Eye Camera"
             }
             ActionType.SOCIAL_AUTO_POST -> {
                 applySocialRouteSpec(action.target, action.payload)
                 _openSocialPosterTrigger.value += 1
-                "Opened LEON Social Auto-Poster"
+                "Opened ALI Social Auto-Poster"
             }
             ActionType.OPEN_LIFE_COMPASS -> {
                 if (action.target.isNotBlank()) {
@@ -1708,7 +1786,7 @@ class LeonViewModel(
     fun deliberateOnLifeCompass(queryOverride: String? = null, speakAloud: Boolean = true) {
         val query = (queryOverride ?: _lifeCompassState.value.queryInput).trim()
         if (query.isEmpty()) {
-            _statusBanner.value = "बॉस, पहले अपनी उलझन या सवाल लिखें — LEON सोचकर सही राह बताएगा।"
+            _statusBanner.value = "बॉस, पहले अपनी उलझन या सवाल लिखें — ALI AI सोचकर सही राह बताएगा।"
             return
         }
         val prefs = currentPreferences()
@@ -1789,7 +1867,7 @@ class LeonViewModel(
         viewModelScope.launch {
             repository.createTask(
                 title = clean,
-                notes = "Added from LEON Sahi Raah • Life Compass",
+                notes = "Added from ALI Sahi Raah • Life Compass",
                 dueLabel = "Today",
                 priority = TaskPriority.HIGH
             ).onSuccess {
@@ -1817,7 +1895,7 @@ class LeonViewModel(
         refreshTelemetry()
         _statusBanner.value = if (enabled) {
             val sec = CallReceptionistBridge.state.value.config.autoAnswerDelaySeconds
-            "AI Call Receptionist चालू! अब ${sec}s तक कॉल रिसीव न होने पर LEON बात करेगा।"
+            "AI Call Receptionist चालू! अब ${sec}s तक कॉल रिसीव न होने पर ALI AI बात करेगा।"
         } else {
             "AI Call Receptionist बंद कर दिया गया।"
         }

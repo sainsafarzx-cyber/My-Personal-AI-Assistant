@@ -82,7 +82,7 @@ private data class LeonNavDestination(
 )
 
 private val leonDestinations = listOf(
-    LeonNavDestination(ROUTE_HUD, "LEON", Icons.Filled.Hub, Icons.Outlined.Hub, "nav_hud"),
+    LeonNavDestination(ROUTE_HUD, "ALI", Icons.Filled.Hub, Icons.Outlined.Hub, "nav_hud"),
     LeonNavDestination(ROUTE_CONTROL, "Control", Icons.Filled.Bolt, Icons.Outlined.Bolt, "nav_control"),
     LeonNavDestination(ROUTE_RADAR, "Radar", Icons.Filled.Radar, Icons.Outlined.Radar, "nav_radar"),
     LeonNavDestination(ROUTE_MEMORY, "Memory", Icons.Filled.Psychology, Icons.Outlined.Psychology, "nav_memory"),

@@ -124,7 +124,7 @@ class LeonRepository(
         return try {
             val current = getPreferencesOnce()
             val updated = current.copy(
-                assistantName = "LEON AI",
+                assistantName = "ALI AI",
                 defaultLanguage = defaultLanguage?.code ?: current.defaultLanguage,
                 alwaysReadyEnabled = alwaysReadyEnabled ?: current.alwaysReadyEnabled,
                 lockScreenModeEnabled = lockScreenModeEnabled ?: current.lockScreenModeEnabled,

@@ -93,6 +93,7 @@ object LeonSpeaker : TextToSpeech.OnInitListener {
             }.onFailure { err ->
                 isInitializing = false
                 Log.w(TAG, "TextToSpeech construction failed cleanly", err)
+                finishSpeakingCleanup(notifyIdle = true)
             }
         }
     }
@@ -106,6 +107,7 @@ object LeonSpeaker : TextToSpeech.OnInitListener {
     ) {
         val cleaned = cleanForSpeech(text)
         if (cleaned.isBlank()) return
+        _isSpeaking.value = true
         init(context)
 
         mainHandler.post {
@@ -266,8 +268,11 @@ object LeonSpeaker : TextToSpeech.OnInitListener {
         LeonMusicEngine.setTtsSpeaking(false)
         if (VoiceServiceBridge.orbState.value == VoiceOrbState.SPEAKING) {
             VoiceServiceBridge.setOrbState(
-                if (VoiceServiceBridge.alwaysReadyRunning.value) VoiceOrbState.WAKE_LISTENING
-                else VoiceOrbState.IDLE
+                when {
+                    VoiceServiceBridge.alwaysReadyRunning.value -> VoiceOrbState.WAKE_LISTENING
+                    VoiceServiceBridge.continuousConversationActive.value -> VoiceOrbState.ACTIVE_LISTENING
+                    else -> VoiceOrbState.IDLE
+                }
             )
         }
         abandonSpeechFocus()
@@ -393,7 +398,6 @@ object LeonSpeaker : TextToSpeech.OnInitListener {
         if (!containsDevanagari(input)) return input
 
         var text = input
-            .replace("लियोन", "Leon")
             .replace("अली", "Ali")
             .replace("बॉस", "Boss")
             .replace("न्यूज़", "News")

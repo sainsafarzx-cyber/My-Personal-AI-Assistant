@@ -6,6 +6,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -115,6 +118,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.core.LeonRuntimePrefs
 import com.example.data.AssistantLanguage
 import com.example.data.ConversationMessage
 import com.example.data.DeviceTelemetry
@@ -131,6 +135,11 @@ import com.example.ui.theme.HudBorder
 import com.example.ui.theme.HudSurface
 import com.example.ui.theme.HudSurfaceElevated
 import com.example.ui.theme.NeuralViolet
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import kotlin.math.sqrt
 
 @Composable
 fun HudDashboardScreen(
@@ -147,6 +156,7 @@ fun HudDashboardScreen(
     val orbState by viewModel.orbState.collectAsStateWithLifecycle()
     val partialTranscript by viewModel.partialTranscript.collectAsStateWithLifecycle()
     val alwaysReadyRunning by viewModel.alwaysReadyRunning.collectAsStateWithLifecycle()
+    val continuousConversationActive by viewModel.continuousConversationActive.collectAsStateWithLifecycle()
     val musicPlaying by viewModel.musicPlaying.collectAsStateWithLifecycle()
     val voiceRepliesEnabled by viewModel.voiceRepliesEnabled.collectAsStateWithLifecycle()
     val isSpeaking by viewModel.isSpeaking.collectAsStateWithLifecycle()
@@ -169,9 +179,14 @@ fun HudDashboardScreen(
     val preferredLocaleTag = prefs?.let { AssistantLanguage.fromCode(it.defaultLanguage).localeTag } ?: "hi-IN"
     val latestPreferredLocaleTag by rememberUpdatedState(preferredLocaleTag)
     val latestInternetConnected by rememberUpdatedState(telemetry.internetConnected)
+    val latestContinuousActive by rememberUpdatedState(continuousConversationActive)
+    val latestAlwaysReadyRunning by rememberUpdatedState(alwaysReadyRunning)
+    val latestPendingConfirmation by rememberUpdatedState(pendingConfirmation)
 
     var fgRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     var isFgListening by remember { mutableStateOf(false) }
+    var consecutiveRecErrors by remember { mutableStateOf(0) }
+    val latestIsFgListening by rememberUpdatedState(isFgListening)
 
     val destroyFgRecognizer: () -> Unit = {
         runCatching {
@@ -221,7 +236,7 @@ fun HudDashboardScreen(
             if (preferOffline || !latestInternetConnected) {
                 putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             }
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "बोलिए बॉस — LEON सुन रहा है...")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "बोलिए बॉस — अली (ALI AI) सुन रहा है...")
         }
         if (speechIntent.resolveActivity(context.packageManager) != null) {
             speechIntentLauncher.launch(speechIntent)
@@ -261,6 +276,7 @@ fun HudDashboardScreen(
             created.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
                     isFgListening = true
+                    consecutiveRecErrors = 0
                     viewModel.updateForegroundOrbListening(VoiceOrbState.ACTIVE_LISTENING, "")
                 }
 
@@ -279,26 +295,38 @@ fun HudDashboardScreen(
                     destroyFgRecognizer()
                     when (error) {
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                            viewModel.setContinuousConversationActive(false)
                             viewModel.finishForegroundMicCapture(capturedTranscript = false)
                             viewModel.reportError("वॉइस कमांड के लिए माइक्रोफ़ोन परमिशन ज़रूरी है।")
                         }
                         SpeechRecognizer.ERROR_NO_MATCH,
                         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
                             viewModel.finishForegroundMicCapture(capturedTranscript = false)
-                            viewModel.reportError("आवाज़ साफ़ नहीं सुनाई दी — दुबारा Voice Orb दबाएं या टाइप करें।")
+                            if (!latestContinuousActive) {
+                                viewModel.reportError("आवाज़ साफ़ नहीं सुनाई दी — दुबारा Voice Orb दबाएं या टाइप करें।")
+                            }
                         }
                         else -> {
                             if (!effectiveOffline) {
                                 // Retry once immediately using offline/on-device speech recognition
                                 startRecognizerSession(preferOffline = true)
-                            } else {
+                            } else if (!latestContinuousActive) {
                                 launchSpeechIntentFallback(true)
+                            } else {
+                                consecutiveRecErrors += 1
+                                viewModel.finishForegroundMicCapture(capturedTranscript = false)
+                                if (consecutiveRecErrors >= 2) {
+                                    consecutiveRecErrors = 0
+                                    viewModel.setContinuousConversationActive(false)
+                                    viewModel.reportError("वॉइस पहचान अभी उपलब्ध नहीं है — कृपया माइक या नेटवर्क जांचें।")
+                                }
                             }
                         }
                     }
                 }
 
                 override fun onResults(results: Bundle?) {
+                    consecutiveRecErrors = 0
                     val spoken = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
@@ -361,27 +389,150 @@ fun HudDashboardScreen(
         }
     }
 
-    val micPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        viewModel.refreshTelemetry()
-        if (granted) {
-            startVoiceCapture()
-        } else {
-            viewModel.reportError("Microphone permission is needed for voice commands.")
+    LaunchedEffect(
+        continuousConversationActive,
+        alwaysReadyRunning,
+        isSpeaking,
+        isThinking,
+        isFgListening,
+        pendingConfirmation
+    ) {
+        if (!continuousConversationActive ||
+            alwaysReadyRunning ||
+            isSpeaking ||
+            isThinking ||
+            isFgListening ||
+            pendingConfirmation != null
+        ) {
+            return@LaunchedEffect
+        }
+
+        val hasMic = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasMic) {
+            viewModel.setContinuousConversationActive(false)
+            return@LaunchedEffect
+        }
+
+        // Let speaker output settle so LEON never triggers itself from echo
+        delay(550L)
+        if (!isActive ||
+            !latestContinuousActive ||
+            latestAlwaysReadyRunning ||
+            viewModel.isSpeaking.value ||
+            viewModel.isThinking.value ||
+            latestIsFgListening ||
+            latestPendingConfirmation != null
+        ) {
+            return@LaunchedEffect
+        }
+
+        viewModel.updateForegroundOrbListening(VoiceOrbState.ACTIVE_LISTENING, "")
+
+        val vadResult = withContext(Dispatchers.IO) {
+            val sampleRate = 16_000
+            val minBuf = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            ).coerceAtLeast(2048)
+
+            var recorder: AudioRecord? = null
+            var initOk = false
+            var speechDetected = false
+            try {
+                @Suppress("MissingPermission")
+                recorder = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    minBuf
+                )
+                if (recorder.state == AudioRecord.STATE_INITIALIZED) {
+                    initOk = true
+                    recorder.startRecording()
+                    val frame = ShortArray(800)
+                    var consecutiveHotFrames = 0
+                    while (isActive && latestContinuousActive) {
+                        if (latestAlwaysReadyRunning ||
+                            viewModel.isSpeaking.value ||
+                            viewModel.isThinking.value ||
+                            latestIsFgListening ||
+                            latestPendingConfirmation != null
+                        ) {
+                            break
+                        }
+                        val read = recorder.read(frame, 0, frame.size)
+                        if (read > 0) {
+                            var sumSq = 0.0
+                            for (i in 0 until read) {
+                                val s = frame[i].toDouble()
+                                sumSq += s * s
+                            }
+                            val rms = sqrt(sumSq / read)
+                            if (rms > 750.0) {
+                                consecutiveHotFrames++
+                                if (consecutiveHotFrames >= 2) {
+                                    speechDetected = true
+                                    break
+                                }
+                            } else {
+                                consecutiveHotFrames = 0
+                            }
+                        } else {
+                            delay(60L)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // AudioRecord unavailable
+            } finally {
+                runCatching {
+                    recorder?.stop()
+                    recorder?.release()
+                }
+            }
+            initOk to speechDetected
+        }
+
+        val (recorderInitOk, speechDetected) = vadResult
+        if (isActive &&
+            speechDetected &&
+            latestContinuousActive &&
+            !latestAlwaysReadyRunning &&
+            !viewModel.isSpeaking.value &&
+            !viewModel.isThinking.value &&
+            !latestIsFgListening &&
+            latestPendingConfirmation == null
+        ) {
+            startRecognizerSession(preferOffline = !latestInternetConnected)
+        } else if (isActive && !recorderInitOk && latestContinuousActive && !latestAlwaysReadyRunning) {
+            viewModel.setContinuousConversationActive(false)
+            viewModel.reportError("कंटीन्यूअस माइक शुरू नहीं हो सका — दुबारा Voice Orb दबाएं।")
         }
     }
 
-    val alwaysReadyPermissionsLauncher = rememberLauncherForActivityResult(
+    var pendingVoiceStartMode by remember { mutableStateOf("orb") }
+
+    val oneTimeBatchPermLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
+        LeonRuntimePrefs.setOneTimePermissionsAsked(context, true)
         viewModel.refreshTelemetry()
         val micGranted = grants[Manifest.permission.RECORD_AUDIO] == true ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         if (micGranted) {
-            viewModel.toggleAlwaysReadyMode(true)
+            if (pendingVoiceStartMode == "orb") {
+                viewModel.startPersistentVoiceConversation()
+                startVoiceCapture()
+            } else {
+                viewModel.toggleAlwaysReadyMode(true)
+            }
         } else {
-            viewModel.reportError("Microphone permission is required for 24/7 Lock-Screen Always-Ready mode.")
+            viewModel.reportError("वॉइस चलाने के लिए कम से कम Microphone परमिशन देना ज़रूरी है।")
         }
     }
 
@@ -482,38 +633,53 @@ fun HudDashboardScreen(
                 isThinking = isThinking,
                 partialTranscript = partialTranscript,
                 alwaysReadyRunning = alwaysReadyRunning,
+                continuousConversationActive = continuousConversationActive,
                 lockScreenModeEnabled = lockScreenModeEnabled,
                 ownerName = ownerName,
                 onOrbClick = {
-                    if (isSpeaking) {
-                        viewModel.stopSpeaking()
-                    }
-                    val granted = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.RECORD_AUDIO
-                    ) == PackageManager.PERMISSION_GRANTED
-                    if (granted) {
-                        startVoiceCapture()
+                    if (continuousConversationActive || isFgListening) {
+                        destroyFgRecognizer()
+                        viewModel.stopVoiceConversation()
                     } else {
-                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        if (isSpeaking) {
+                            viewModel.stopSpeaking()
+                        }
+                        val micGranted = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+                        val missingPerms = LeonRuntimePrefs.getMissingCorePermissions(context)
+                        val shouldAskOnce = !micGranted ||
+                            (!LeonRuntimePrefs.isOneTimePermissionsAsked(context) && missingPerms.isNotEmpty())
+                        if (shouldAskOnce) {
+                            LeonRuntimePrefs.setOneTimePermissionsAsked(context, true)
+                            pendingVoiceStartMode = "orb"
+                            oneTimeBatchPermLauncher.launch(
+                                if (missingPerms.isNotEmpty()) missingPerms else arrayOf(Manifest.permission.RECORD_AUDIO)
+                            )
+                        } else {
+                            viewModel.startPersistentVoiceConversation()
+                            startVoiceCapture()
+                        }
                     }
                 },
                 onToggleAlwaysReady = { enable ->
                     if (enable) {
-                        val missingPerms = buildList {
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                                add(Manifest.permission.RECORD_AUDIO)
-                            }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                add(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        }
-                        if (missingPerms.isEmpty()) {
-                            viewModel.toggleAlwaysReadyMode(true)
+                        val micGranted = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+                        val missingPerms = LeonRuntimePrefs.getMissingCorePermissions(context)
+                        val shouldAskOnce = !micGranted ||
+                            (!LeonRuntimePrefs.isOneTimePermissionsAsked(context) && missingPerms.isNotEmpty())
+                        if (shouldAskOnce) {
+                            LeonRuntimePrefs.setOneTimePermissionsAsked(context, true)
+                            pendingVoiceStartMode = "always_ready"
+                            oneTimeBatchPermLauncher.launch(
+                                if (missingPerms.isNotEmpty()) missingPerms else arrayOf(Manifest.permission.RECORD_AUDIO)
+                            )
                         } else {
-                            alwaysReadyPermissionsLauncher.launch(missingPerms.toTypedArray())
+                            viewModel.toggleAlwaysReadyMode(true)
                         }
                     } else {
                         viewModel.toggleAlwaysReadyMode(false)
@@ -569,7 +735,7 @@ fun HudDashboardScreen(
                         ) {
                             EmptyLeonWelcomeCard(
                                 ownerName = ownerName,
-                                onWakePhraseClick = { viewModel.submitPrompt("Hey Leon") }
+                                onWakePhraseClick = { viewModel.submitPrompt("Hey Ali") }
                             )
                         }
                     }
@@ -600,7 +766,7 @@ fun HudDashboardScreen(
                             ) {
                                 EmptyLeonWelcomeCard(
                                     ownerName = ownerName,
-                                    onWakePhraseClick = { viewModel.submitPrompt("Hey Leon") }
+                                    onWakePhraseClick = { viewModel.submitPrompt("Hey Ali") }
                                 )
                             }
                         } else {
@@ -1142,6 +1308,7 @@ private fun LeonOrbHeader(
     isThinking: Boolean,
     partialTranscript: String,
     alwaysReadyRunning: Boolean,
+    continuousConversationActive: Boolean,
     lockScreenModeEnabled: Boolean,
     ownerName: String,
     onOrbClick: () -> Unit,
@@ -1169,11 +1336,23 @@ private fun LeonOrbHeader(
 
     val effectiveState = if (isThinking) VoiceOrbState.PROCESSING else orbState
     val statusText = when (effectiveState) {
-        VoiceOrbState.IDLE -> if (alwaysReadyRunning) "HEY LEON READY" else "TAP ORB TO SPEAK"
-        VoiceOrbState.WAKE_LISTENING -> "LISTENING: \"HEY LEON\""
-        VoiceOrbState.ACTIVE_LISTENING -> "LISTENING BOSS..."
+        VoiceOrbState.IDLE -> when {
+            continuousConversationActive -> "CONTINUOUS ON — बोलिए (TAP ORB TO STOP)"
+            alwaysReadyRunning -> "HEY ALI READY"
+            else -> "TAP ORB TO SPEAK"
+        }
+        VoiceOrbState.WAKE_LISTENING -> if (continuousConversationActive) {
+            "CONTINUOUS ON — बोलिए (TAP ORB TO STOP)"
+        } else {
+            "LISTENING: \"HEY ALI\""
+        }
+        VoiceOrbState.ACTIVE_LISTENING -> if (continuousConversationActive) {
+            "CONTINUOUS ON — बोलिए (TAP ORB TO STOP)"
+        } else {
+            "LISTENING BOSS..."
+        }
         VoiceOrbState.PROCESSING -> "ALI AI THINKING..."
-        VoiceOrbState.SPEAKING -> "LEON SPEAKING..."
+        VoiceOrbState.SPEAKING -> "ALI AI SPEAKING..."
     }
 
     Surface(
@@ -1239,15 +1418,19 @@ private fun LeonOrbHeader(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Mic,
-                    contentDescription = "Activate LEON Voice Command",
-                    tint = ArcCyan,
+                    contentDescription = if (continuousConversationActive) {
+                        "Stop continuous voice conversation"
+                    } else {
+                        "Activate ALI AI Voice Command"
+                    },
+                    tint = if (continuousConversationActive) EmeraldTelemetry else ArcCyan,
                     modifier = Modifier.size(28.dp)
                 )
             }
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "LEON AI × ALI",
+                    text = "अली • ALI AI",
                     style = MaterialTheme.typography.titleLarge,
                     color = ArcCyan
                 )
@@ -1265,7 +1448,11 @@ private fun LeonOrbHeader(
                 Text(
                     text = statusText,
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (effectiveState == VoiceOrbState.ACTIVE_LISTENING) EmeraldTelemetry else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (effectiveState == VoiceOrbState.ACTIVE_LISTENING || continuousConversationActive) {
+                        EmeraldTelemetry
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
                 if (partialTranscript.isNotBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1562,7 +1749,7 @@ private fun EmptyLeonWelcomeCard(
                 onClick = onWakePhraseClick,
                 colors = ButtonDefaults.buttonColors(containerColor = ArcCyan, contentColor = DeepObsidian)
             ) {
-                Text("Test \"Hey Leon\"")
+                Text("Test \"Hey Ali\"")
             }
         }
     }
@@ -1613,7 +1800,7 @@ private fun ConversationBubble(
             ) {
                 Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
-                        text = if (isUser) "BOSS" else "LEON × ALI",
+                        text = if (isUser) "BOSS" else "ALI AI",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isUser) MaterialTheme.colorScheme.onSecondaryContainer else ArcCyan
                     )
@@ -1641,7 +1828,7 @@ private fun ConversationBubble(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.VolumeUp,
-                            contentDescription = "Speak LEON reply aloud",
+                            contentDescription = "Speak ALI AI reply aloud",
                             tint = ArcCyan,
                             modifier = Modifier.size(18.dp)
                         )

@@ -2,6 +2,7 @@ package com.example.service
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -25,6 +26,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -40,6 +42,7 @@ import com.example.ai.LocalCommandRouter
 import com.example.ai.PublicKnowledgeFallback
 import com.example.audio.LeonSpeaker
 import com.example.automation.LeonActionExecutor
+import com.example.core.LeonRuntimePrefs
 import com.example.data.ActionType
 import com.example.data.AliBrainResult
 import com.example.data.AssistantLanguage
@@ -80,11 +83,13 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
 
     companion object {
         const val ACTION_START_ALWAYS_READY = "com.example.action.START_ALWAYS_READY"
+        const val ACTION_ENSURE_ALIVE = "com.example.action.ENSURE_ALIVE"
         const val ACTION_CAPTURE_ONCE = "com.example.action.CAPTURE_ONCE"
         const val ACTION_PAUSE_LISTENING = "com.example.action.PAUSE_LISTENING"
         const val ACTION_SPEAK = "com.example.action.SPEAK"
         const val ACTION_PROCESSING_DONE = "com.example.action.PROCESSING_DONE"
         const val ACTION_EMERGENCY_STOP = "com.example.action.EMERGENCY_STOP"
+        const val ACTION_STOP_VOICE_ONLY = "com.example.action.STOP_VOICE_ONLY"
         const val ACTION_SET_LOCK_SCREEN_MODE = "com.example.action.SET_LOCK_SCREEN_MODE"
         const val ACTION_READ_LOCKSCREEN_ALERTS = "com.example.action.READ_LOCKSCREEN_ALERTS"
         const val ACTION_TOGGLE_MUSIC = "com.example.action.TOGGLE_MUSIC"
@@ -96,31 +101,71 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
         const val EXTRA_VOICE_SPEED = "extra_voice_speed"
         const val EXTRA_QUEUE_MODE = "extra_queue_mode"
         const val EXTRA_LOCK_SCREEN_MODE = "extra_lock_screen_mode"
+        const val EXTRA_CONTINUOUS_MODE = "extra_continuous_mode"
         const val EXTRA_MUSIC_COMMAND = "extra_music_command"
         const val EXTRA_MUSIC_QUERY = "extra_music_query"
         const val EXTRA_TIMER_SECONDS = "extra_timer_seconds"
         const val EXTRA_TIMER_LABEL = "extra_timer_label"
+        private const val RESTART_ALARM_REQUEST_CODE = 7099
 
         private val WAKE_WORD_REGEX = Regex(
-            pattern = "(?i)(hey\\s+leon|hi\\s+leon|ok\\s+leon|hello\\s+leon|hey\\s+lian|hey\\s+leone|हे\\s*लियोन|हे\\s*लिऑन|हाय\\s*लियोन|है\\s*लियोन|हलो\\s*लियोन|ओके\\s*लियोन|लियोन)"
+            pattern = "(?i)(hey\\s+ali|hi\\s+ali|ok\\s+ali|hello\\s+ali|हे\\s*अली|हाय\\s*अली|है\\s*अली|हलो\\s*अली|ओके\\s*अली|अली)"
         )
 
         fun startAlwaysReady(
             context: Context,
             language: AssistantLanguage,
             speed: Float = 1.0f,
-            lockScreenMode: Boolean = true
+            lockScreenMode: Boolean = true,
+            continuousMode: Boolean = LeonRuntimePrefs.isContinuousModeActive(context)
         ) {
+            LeonRuntimePrefs.setAlwaysReadyActive(context, true)
+            LeonRuntimePrefs.setContinuousModeActive(context, continuousMode)
+            LeonRuntimePrefs.setLockScreenModeEnabled(context, lockScreenMode)
+            LeonRuntimePrefs.setLanguageCode(context, language.code)
+            LeonRuntimePrefs.setVoiceSpeed(context, speed)
             val intent = Intent(context, LeonVoiceService::class.java).apply {
                 action = ACTION_START_ALWAYS_READY
                 putExtra(EXTRA_LANGUAGE_CODE, language.code)
                 putExtra(EXTRA_VOICE_SPEED, speed)
                 putExtra(EXTRA_LOCK_SCREEN_MODE, lockScreenMode)
+                putExtra(EXTRA_CONTINUOUS_MODE, continuousMode)
             }
             startForegroundSafe(context, intent)
         }
 
+        private fun restartPendingIntent(context: Context): PendingIntent {
+            val intent = Intent(context, LeonVoiceService::class.java).apply {
+                action = ACTION_ENSURE_ALIVE
+            }
+            val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(context, RESTART_ALARM_REQUEST_CODE, intent, flags)
+            } else {
+                PendingIntent.getService(context, RESTART_ALARM_REQUEST_CODE, intent, flags)
+            }
+        }
+
+        private fun scheduleRestartAlarm(context: Context, delayMs: Long = 1_200L) {
+            runCatching {
+                val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+                am.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + delayMs,
+                    restartPendingIntent(context)
+                )
+            }
+        }
+
+        private fun cancelRestartAlarm(context: Context) {
+            runCatching {
+                val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+                am.cancel(restartPendingIntent(context))
+            }
+        }
+
         fun setLockScreenMode(context: Context, enabled: Boolean) {
+            LeonRuntimePrefs.setLockScreenModeEnabled(context, enabled)
             val intent = Intent(context, LeonVoiceService::class.java).apply {
                 action = ACTION_SET_LOCK_SCREEN_MODE
                 putExtra(EXTRA_LOCK_SCREEN_MODE, enabled)
@@ -159,7 +204,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             }
         }
 
-        fun startBackgroundTimer(context: Context, seconds: Int, label: String = "LEON Timer") {
+        fun startBackgroundTimer(context: Context, seconds: Int, label: String = "ALI Timer") {
             val intent = Intent(context, LeonVoiceService::class.java).apply {
                 action = ACTION_START_TIMER_BACKGROUND
                 putExtra(EXTRA_TIMER_SECONDS, seconds)
@@ -203,6 +248,15 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
         fun emergencyStop(context: Context) {
             val intent = Intent(context, LeonVoiceService::class.java).apply {
                 action = ACTION_EMERGENCY_STOP
+            }
+            startServiceSafe(context, intent)
+        }
+
+        fun stopVoiceOnly(context: Context) {
+            LeonRuntimePrefs.setAlwaysReadyActive(context, false)
+            LeonRuntimePrefs.setContinuousModeActive(context, false)
+            val intent = Intent(context, LeonVoiceService::class.java).apply {
+                action = ACTION_STOP_VOICE_ONLY
             }
             startServiceSafe(context, intent)
         }
@@ -361,31 +415,74 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
         val action = intent?.action
 
         // Ensure foreground promotion happens only for persistent foreground modes (Always-Ready, Music, Timer)
-        // or when invoked while Always-Ready / screen-locked; never fail single foreground UI captures.
+        // or when invoked while Always-Ready / screen-locked / restarted by START_STICKY; never fail single foreground UI captures.
+        val persistedAlwaysReady = LeonRuntimePrefs.isAlwaysReadyActive(applicationContext)
         if (action in setOf(
                 ACTION_START_ALWAYS_READY,
+                ACTION_ENSURE_ALIVE,
                 ACTION_READ_LOCKSCREEN_ALERTS,
                 ACTION_TOGGLE_MUSIC,
                 ACTION_CONTROL_MUSIC,
                 ACTION_START_TIMER_BACKGROUND
-            ) || (action == ACTION_CAPTURE_ONCE && (alwaysReadyMode || isDeviceLocked() || !VoiceServiceBridge.foregroundUiActive.value))
+            ) || (action == null && persistedAlwaysReady)
+            || (action == ACTION_CAPTURE_ONCE && (alwaysReadyMode || isDeviceLocked() || !VoiceServiceBridge.foregroundUiActive.value))
         ) {
-            val needMic = (action == ACTION_START_ALWAYS_READY || action == ACTION_CAPTURE_ONCE || alwaysReadyMode) && hasMicPermission()
+            val needMic = (action in setOf(ACTION_START_ALWAYS_READY, ACTION_ENSURE_ALIVE, ACTION_CAPTURE_ONCE) ||
+                action == null || alwaysReadyMode) && hasMicPermission()
             promoteToForegroundSafely(includeMic = needMic)
         }
 
         when (action) {
+            null, ACTION_ENSURE_ALIVE -> {
+                cancelRestartAlarm(applicationContext)
+                if (persistedAlwaysReady && hasMicPermission()) {
+                    currentLanguage = AssistantLanguage.fromCode(LeonRuntimePrefs.getLanguageCode(applicationContext))
+                    speechSpeed = LeonRuntimePrefs.getVoiceSpeed(applicationContext)
+                    lockScreenModeEnabled = LeonRuntimePrefs.isLockScreenModeEnabled(applicationContext)
+                    alwaysReadyMode = true
+                    val cont = LeonRuntimePrefs.isContinuousModeActive(applicationContext)
+                    VoiceServiceBridge.setContinuousConversationActive(cont)
+                    awaitingActiveCommand = cont
+                    if (lockScreenModeEnabled || LeonMusicEngine.isPlaying()) {
+                        ensureWakeLockHeld()
+                    }
+                    promoteToForegroundSafely(includeMic = true)
+                    VoiceServiceBridge.setRunning(true)
+                    VoiceServiceBridge.setLockScreenModeActive(lockScreenModeEnabled)
+                    VoiceServiceBridge.setOrbState(
+                        if (awaitingActiveCommand) VoiceOrbState.ACTIVE_LISTENING else VoiceOrbState.WAKE_LISTENING
+                    )
+                    scheduleListen(delayMs = 250L)
+                } else if (!shouldStaySticky()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+            }
+
             ACTION_START_ALWAYS_READY -> {
+                cancelRestartAlarm(applicationContext)
                 if (!hasMicPermission()) {
+                    LeonRuntimePrefs.setAlwaysReadyActive(applicationContext, false)
                     VoiceServiceBridge.setRunning(false)
                     VoiceServiceBridge.emitEvent(
-                        VoiceServiceEvent.ErrorOccurred("Microphone permission is required for Hey Leon Always-Ready mode.")
+                        VoiceServiceEvent.ErrorOccurred("Microphone permission is required for Hey Ali Always-Ready mode.")
                     )
                     if (!LeonMusicEngine.isPlaying()) stopSelf()
                     return START_NOT_STICKY
                 }
                 alwaysReadyMode = true
-                awaitingActiveCommand = false
+                val cont = if (intent?.hasExtra(EXTRA_CONTINUOUS_MODE) == true) {
+                    intent.getBooleanExtra(EXTRA_CONTINUOUS_MODE, false)
+                } else {
+                    LeonRuntimePrefs.isContinuousModeActive(applicationContext)
+                }
+                LeonRuntimePrefs.setAlwaysReadyActive(applicationContext, true)
+                LeonRuntimePrefs.setContinuousModeActive(applicationContext, cont)
+                LeonRuntimePrefs.setLockScreenModeEnabled(applicationContext, lockScreenModeEnabled)
+                LeonRuntimePrefs.setLanguageCode(applicationContext, currentLanguage.code)
+                LeonRuntimePrefs.setVoiceSpeed(applicationContext, speechSpeed)
+                VoiceServiceBridge.setContinuousConversationActive(cont)
+                awaitingActiveCommand = cont
                 if (lockScreenModeEnabled || LeonMusicEngine.isPlaying()) {
                     ensureWakeLockHeld()
                 } else {
@@ -394,11 +491,14 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 promoteToForegroundSafely(includeMic = true)
                 VoiceServiceBridge.setRunning(true)
                 VoiceServiceBridge.setLockScreenModeActive(lockScreenModeEnabled)
-                VoiceServiceBridge.setOrbState(VoiceOrbState.WAKE_LISTENING)
+                VoiceServiceBridge.setOrbState(
+                    if (awaitingActiveCommand) VoiceOrbState.ACTIVE_LISTENING else VoiceOrbState.WAKE_LISTENING
+                )
                 scheduleListen(delayMs = 200L)
             }
 
             ACTION_SET_LOCK_SCREEN_MODE -> {
+                LeonRuntimePrefs.setLockScreenModeEnabled(applicationContext, lockScreenModeEnabled)
                 if (alwaysReadyMode || LeonMusicEngine.isPlaying()) {
                     if (lockScreenModeEnabled || LeonMusicEngine.isPlaying()) ensureWakeLockHeld() else releaseWakeLock()
                     VoiceServiceBridge.setLockScreenModeActive(lockScreenModeEnabled)
@@ -463,7 +563,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
 
             ACTION_START_TIMER_BACKGROUND -> {
                 val seconds = intent.getIntExtra(EXTRA_TIMER_SECONDS, 60).coerceIn(1, 86400)
-                val label = intent.getStringExtra(EXTRA_TIMER_LABEL).orEmpty().ifBlank { "LEON Timer" }
+                val label = intent.getStringExtra(EXTRA_TIMER_LABEL).orEmpty().ifBlank { "ALI Timer" }
                 ensureWakeLockHeld()
                 promoteToForegroundSafely(includeMic = alwaysReadyMode && hasMicPermission())
                 scheduleBackgroundTimer(seconds, label)
@@ -480,7 +580,9 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             ACTION_PAUSE_LISTENING -> {
                 cancelListenTimers()
                 stopRecognizerInternal()
-                awaitingActiveCommand = false
+                if (!VoiceServiceBridge.continuousConversationActive.value) {
+                    awaitingActiveCommand = false
+                }
                 if (!shouldStaySticky()) {
                     return START_NOT_STICKY
                 }
@@ -493,6 +595,31 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                     tts?.isSpeaking != true
                 ) {
                     recoverOrbAfterSpeechFailure()
+                }
+            }
+
+            ACTION_STOP_VOICE_ONLY -> {
+                alwaysReadyMode = false
+                awaitingActiveCommand = false
+                LeonRuntimePrefs.setAlwaysReadyActive(applicationContext, false)
+                LeonRuntimePrefs.setContinuousModeActive(applicationContext, false)
+                cancelRestartAlarm(applicationContext)
+                pendingSpeechQueue.clear()
+                cancelListenTimers()
+                mainHandler.removeCallbacks(ttsWatchdogRunnable)
+                stopRecognizerInternal()
+                tts?.stop()
+                LeonMusicEngine.setTtsSpeaking(false)
+                VoiceServiceBridge.setContinuousConversationActive(false)
+                VoiceServiceBridge.setRunning(false)
+                VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
+                if (!LeonMusicEngine.isPlaying() && backgroundTimerJob?.isActive != true) {
+                    releaseWakeLock()
+                    stopForegroundCompat()
+                    isPromotedForeground = false
+                    stopSelf()
+                } else {
+                    promoteOrUpdateMediaNotification()
                 }
             }
 
@@ -642,9 +769,9 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 locked && lockScreenModeEnabled && alwaysReadyMode ->
                     append("Lock-Screen Active • Voice Calls, Music & Alerts Ready")
                 alwaysReadyMode && lockScreenModeEnabled ->
-                    append("24/7 Lock-Ready (${currentLanguage.label}) • Say \"Hey Leon\"")
+                    append("24/7 Lock-Ready (${currentLanguage.label}) • Say \"Hey Ali\"")
                 alwaysReadyMode ->
-                    append("Listening for \"Hey Leon\" (${currentLanguage.label})")
+                    append("Listening for \"Hey Ali\" (${currentLanguage.label})")
                 else ->
                     append("Lock-Screen Background Audio Ready")
             }
@@ -659,7 +786,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_leon_notification)
-            .setContentTitle("LEON × ALI AI • Always-Ready")
+            .setContentTitle("अली • ALI AI Always-Ready")
             .setContentText(subtitle)
             .setStyle(NotificationCompat.BigTextStyle().bigText(subtitle))
             .setOngoing(true)
@@ -720,12 +847,14 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
 
     @SuppressLint("MissingPermission")
     private fun startSilentVoiceActivityWait() {
-        if (!alwaysReadyMode || awaitingActiveCommand || !hasMicPermission()) return
+        if (!alwaysReadyMode || !hasMicPermission()) return
         if (VoiceServiceBridge.foregroundMicActive.value || isAudioInCall() || LeonSpeaker.isSpeaking.value) return
         if (vadJob?.isActive == true) return
 
         stopRecognizerInternal()
-        VoiceServiceBridge.setOrbState(VoiceOrbState.WAKE_LISTENING)
+        VoiceServiceBridge.setOrbState(
+            if (awaitingActiveCommand) VoiceOrbState.ACTIVE_LISTENING else VoiceOrbState.WAKE_LISTENING
+        )
 
         vadJob = serviceScope.launch {
             val sampleRate = 16_000
@@ -751,7 +880,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                     recorder.startRecording()
                     val frame = ShortArray(800)
                     var consecutiveHotFrames = 0
-                    while (isActive && alwaysReadyMode && !awaitingActiveCommand) {
+                    while (isActive && alwaysReadyMode) {
                         if (VoiceServiceBridge.foregroundMicActive.value ||
                             isAudioInCall() ||
                             LeonSpeaker.isSpeaking.value ||
@@ -790,7 +919,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 }
             }
 
-            if (isActive && alwaysReadyMode && !awaitingActiveCommand &&
+            if (isActive && alwaysReadyMode &&
                 !VoiceServiceBridge.foregroundMicActive.value &&
                 (lockScreenModeEnabled || !isScreenOffOrLocked())
             ) {
@@ -843,8 +972,8 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             return
         }
 
-        // In 24/7 idle mode, wait silently via AudioRecord VAD so SpeechRecognizer never beeps ("tuk-tuk") in a loop!
-        val shouldUseSilentVad = alwaysReadyMode && !awaitingActiveCommand && !bypassVadOnce
+        // In 24/7 idle or continuous follow-up mode, wait silently via AudioRecord VAD so SpeechRecognizer never beeps ("tuk-tuk") in a loop!
+        val shouldUseSilentVad = alwaysReadyMode && !bypassVadOnce
         bypassVadOnce = false
         if (shouldUseSilentVad) {
             startSilentVoiceActivityWait()
@@ -932,9 +1061,15 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                             scheduleListen(350L)
                             return
                         }
-                        awaitingActiveCommand = false
+                        if (!VoiceServiceBridge.continuousConversationActive.value) {
+                            awaitingActiveCommand = false
+                        }
                         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                             alwaysReadyMode = false
+                            awaitingActiveCommand = false
+                            LeonRuntimePrefs.setAlwaysReadyActive(applicationContext, false)
+                            LeonRuntimePrefs.setContinuousModeActive(applicationContext, false)
+                            VoiceServiceBridge.setContinuousConversationActive(false)
                             VoiceServiceBridge.setRunning(false)
                             if (!LeonMusicEngine.isPlaying()) {
                                 releaseWakeLock()
@@ -947,13 +1082,15 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                         } else if (!lockScreenModeEnabled && isDeviceLocked()) {
                             VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
                         } else {
-                            VoiceServiceBridge.setOrbState(VoiceOrbState.WAKE_LISTENING)
+                            VoiceServiceBridge.setOrbState(
+                                if (awaitingActiveCommand) VoiceOrbState.ACTIVE_LISTENING else VoiceOrbState.WAKE_LISTENING
+                            )
                             val backoff = when (error) {
                                 SpeechRecognizer.ERROR_NETWORK,
                                 SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
                                 SpeechRecognizer.ERROR_SERVER -> 3500L
                                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 1500L
-                                else -> 800L
+                                else -> 500L
                             }
                             scheduleListen(backoff)
                         }
@@ -1077,12 +1214,17 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             return
         }
 
-        val lower = spoken.lowercase(Locale.ROOT)
+        val lower = spoken.lowercase(Locale.ROOT).trimEnd('.', '!', '?', '।')
         val isStopCommand = lower.contains("emergency stop") ||
             lower == "stop" ||
-            lower == "leon stop" ||
+            lower == "stop listening" ||
+            lower == "ali stop" ||
             lower.contains("रुको") ||
-            lower.contains("बंद करो")
+            lower.contains("बंद करो") ||
+            lower == "स्टॉप" ||
+            lower.contains("बस करो") ||
+            lower == "चुप" ||
+            lower.contains("चुप हो जाओ")
 
         if (isStopCommand) {
             performEmergencyStop()
@@ -1092,12 +1234,14 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
         val wakeMatch = WAKE_WORD_REGEX.find(spoken)
         if (!awaitingActiveCommand && alwaysReadyMode) {
             if (wakeMatch != null) {
+                LeonRuntimePrefs.setContinuousModeActive(applicationContext, true)
+                VoiceServiceBridge.setContinuousConversationActive(true)
+                awaitingActiveCommand = true
                 val remainder = WAKE_WORD_REGEX.replaceFirst(spoken, "")
                     .trim(' ', ',', '.', '!', '?', '।', ':')
                 if (remainder.length > 2) {
                     dispatchCommand(remainder)
                 } else {
-                    awaitingActiveCommand = true
                     VoiceServiceBridge.emitEvent(VoiceServiceEvent.WakeWordDetected)
                     serviceScope.launch {
                         val ownerName = runCatching { repository.getPreferencesOnce().ownerName }.getOrDefault("")
@@ -1115,7 +1259,9 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 scheduleListen(450L)
             }
         } else {
-            awaitingActiveCommand = false
+            if (!VoiceServiceBridge.continuousConversationActive.value) {
+                awaitingActiveCommand = false
+            }
             dispatchCommand(spoken)
         }
     }
@@ -1352,7 +1498,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 }
                 ActionType.SET_TIMER -> {
                     val secs = action.payload.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 86400) ?: 60
-                    val label = action.target.ifBlank { "LEON Timer" }
+                    val label = action.target.ifBlank { "ALI Timer" }
                     if (isLocked) {
                         withContext(Dispatchers.Main) {
                             ensureWakeLockHeld()
@@ -1599,6 +1745,9 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             return
         }
         if (alwaysReadyMode || awaitingActiveCommand) {
+            if (alwaysReadyMode && VoiceServiceBridge.continuousConversationActive.value) {
+                awaitingActiveCommand = true
+            }
             if (alwaysReadyMode && !lockScreenModeEnabled && isScreenOffOrLocked()) {
                 VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
             } else if (isAudioInCall()) {
@@ -1621,6 +1770,9 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
     private fun performEmergencyStop() {
         alwaysReadyMode = false
         awaitingActiveCommand = false
+        LeonRuntimePrefs.setAlwaysReadyActive(applicationContext, false)
+        LeonRuntimePrefs.setContinuousModeActive(applicationContext, false)
+        cancelRestartAlarm(applicationContext)
         backgroundAiJob?.cancel()
         backgroundAiJob = null
         backgroundTimerJob?.cancel()
@@ -1635,12 +1787,44 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
         LeonMusicEngine.stopOrPause(applicationContext, stopCompletely = true)
         SocialAutoPosterBridge.clearJob()
         releaseWakeLock()
+        VoiceServiceBridge.setContinuousConversationActive(false)
         VoiceServiceBridge.setRunning(false)
         VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
         VoiceServiceBridge.emitEvent(VoiceServiceEvent.EmergencyStopTriggered)
         stopForegroundCompat()
         isPromotedForeground = false
         stopSelf()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // App swiped/removed from Recent Apps ("काट कर हटाने के बाद भी"):
+        // Reset foreground-only UI flags and immediately ensure background service keeps running
+        // until the user explicitly stops LEON.
+        VoiceServiceBridge.setForegroundUiActive(false)
+        VoiceServiceBridge.setForegroundMicActive(false)
+
+        val persistedActive = LeonRuntimePrefs.isAlwaysReadyActive(applicationContext)
+        if ((alwaysReadyMode || persistedActive) && hasMicPermission()) {
+            alwaysReadyMode = true
+            val cont = LeonRuntimePrefs.isContinuousModeActive(applicationContext)
+            VoiceServiceBridge.setContinuousConversationActive(cont)
+            awaitingActiveCommand = cont
+            if (lockScreenModeEnabled || LeonMusicEngine.isPlaying()) {
+                ensureWakeLockHeld()
+            }
+            promoteToForegroundSafely(includeMic = true)
+            VoiceServiceBridge.setRunning(true)
+            VoiceServiceBridge.setOrbState(
+                if (awaitingActiveCommand) VoiceOrbState.ACTIVE_LISTENING else VoiceOrbState.WAKE_LISTENING
+            )
+            scheduleRestartAlarm(applicationContext, delayMs = 1_200L)
+            scheduleListen(delayMs = 450L)
+        } else if (LeonMusicEngine.isPlaying() || backgroundTimerJob?.isActive == true) {
+            ensureWakeLockHeld()
+            promoteToForegroundSafely(includeMic = false)
+            refreshNotification()
+        }
     }
 
     private fun stopForegroundCompat() {

@@ -131,7 +131,7 @@ fun SocialPosterScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back to LEON HUD",
+                            contentDescription = "Back to ALI AI HUD",
                             tint = ArcCyan
                         )
                     }
@@ -528,9 +528,9 @@ fun SocialPosterScreen(
                                 )
                                 Text(
                                     text = if (telemetry.accessibilityEnabled) {
-                                        "LEON Automation Helper ACTIVE — Share / Story / Send बटन अपने आप दबाएगा"
+                                        "ALI Automation Helper ACTIVE — Share / Story / Send बटन अपने आप दबाएगा"
                                     } else {
-                                        "बिना टैप किए ऑटो-पोस्ट के लिए LEON Accessibility Helper ऑन करें"
+                                        "बिना टैप किए ऑटो-पोस्ट के लिए ALI Accessibility Helper ऑन करें"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (telemetry.accessibilityEnabled) EmeraldTelemetry else AmberCaution

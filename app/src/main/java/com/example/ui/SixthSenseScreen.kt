@@ -548,7 +548,7 @@ fun SixthSenseScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("SOS", "HELP", "LEON").forEach { preset ->
+                        listOf("SOS", "HELP", "ALI").forEach { preset ->
                             OutlinedButton(
                                 onClick = { morseInput = preset },
                                 border = BorderStroke(1.dp, HudBorder),

@@ -1,7 +1,9 @@
 package com.example.ui
 
 import android.Manifest
+import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -51,9 +53,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.core.LeonRuntimePrefs
 import com.example.data.ActionType
 import com.example.data.CapturedNotification
 import com.example.ui.theme.AmberCaution
@@ -69,6 +73,7 @@ fun PermissionsScreen(
     viewModel: LeonViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val telemetry by viewModel.telemetry.collectAsStateWithLifecycle()
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val draftedReply by viewModel.draftedReply.collectAsStateWithLifecycle()
@@ -81,6 +86,23 @@ fun PermissionsScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) {
         viewModel.refreshTelemetry()
+    }
+
+    val batchPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        LeonRuntimePrefs.setOneTimePermissionsAsked(context, true)
+        viewModel.refreshTelemetry()
+    }
+
+    val missingCorePermissions = LeonRuntimePrefs.getMissingCorePermissions(context)
+    val batteryUnrestricted = remember(telemetry) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            pm?.isIgnoringBatteryOptimizations(context.packageName) == true
+        } else {
+            true
+        }
     }
 
     LazyColumn(
@@ -99,11 +121,32 @@ fun PermissionsScreen(
                     color = ArcCyan
                 )
                 Text(
-                    text = "Full transparency and user control over every Android capability",
+                    text = "एक बार में सभी परमिशन दें — बार-बार पूछने की ज़रूरत नहीं",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+
+        // One-Tap All-Permissions Setup Card
+        item {
+            PermissionRowCard(
+                icon = Icons.Rounded.Shield,
+                title = "One-Time All Permissions Setup",
+                description = if (missingCorePermissions.isEmpty()) {
+                    "सभी मुख्य परमिशन (Mic, Call, Contacts, Camera, Alerts) चालू हैं — बैकग्राउंड में बिना रुके चलेगा।"
+                } else {
+                    "माइक, कॉलिंग, कॉन्टैक्ट्स, कैमरा और नोटिफिकेशन एक ही बार में चालू करें।"
+                },
+                granted = missingCorePermissions.isEmpty(),
+                actionLabel = "Grant All (${missingCorePermissions.size})",
+                onAction = {
+                    LeonRuntimePrefs.setOneTimePermissionsAsked(context, true)
+                    if (missingCorePermissions.isNotEmpty()) {
+                        batchPermissionLauncher.launch(missingCorePermissions)
+                    }
+                }
+            )
         }
 
         // Emergency Stop Card
@@ -142,7 +185,7 @@ fun PermissionsScreen(
         item {
             PermissionRowCard(
                 icon = Icons.Rounded.Mic,
-                title = "Microphone (Voice & Hey Leon)",
+                title = "Microphone (Voice & Hey Ali)",
                 description = "Required for speech recognition and hands-free wake word.",
                 granted = telemetry.micPermissionGranted,
                 actionLabel = "Grant Mic",
@@ -189,7 +232,7 @@ fun PermissionsScreen(
             PermissionRowCard(
                 icon = Icons.Rounded.Call,
                 title = "Direct Calling (Screen-Off Voice Call)",
-                description = "Required to place voice calls directly after 'Hey Leon', even when the screen is off.",
+                description = "Required to place voice calls directly after 'Hey Ali', even when the screen is off.",
                 granted = telemetry.phonePermissionGranted,
                 actionLabel = "Grant Phone",
                 onAction = { singlePermissionLauncher.launch(Manifest.permission.CALL_PHONE) }
@@ -200,7 +243,7 @@ fun PermissionsScreen(
         item {
             PermissionRowCard(
                 icon = Icons.Rounded.AccessibilityNew,
-                title = "LEON Accessibility Helper",
+                title = "ALI Accessibility Helper",
                 description = "Enables user-authorized Back, Home, Recents, and notification shade actions.",
                 granted = telemetry.accessibilityEnabled,
                 actionLabel = "Open Settings",
@@ -212,7 +255,7 @@ fun PermissionsScreen(
             PermissionRowCard(
                 icon = Icons.Rounded.Shield,
                 title = "Notification Listener Access",
-                description = "Allows LEON to read incoming messages aloud and draft replies.",
+                description = "Allows ALI AI to read incoming messages aloud and draft replies.",
                 granted = telemetry.notificationListenerEnabled,
                 actionLabel = "Open Settings",
                 onAction = { viewModel.openDeviceShortcut(ActionType.OPEN_SETTINGS, target = "notifications") }
@@ -223,7 +266,7 @@ fun PermissionsScreen(
             PermissionRowCard(
                 icon = Icons.Rounded.SettingsBrightness,
                 title = "Modify System Settings",
-                description = "Allows LEON to adjust system screen brightness directly.",
+                description = "Allows ALI AI to adjust system screen brightness directly.",
                 granted = telemetry.writeSettingsGranted,
                 actionLabel = "Open Settings",
                 onAction = { viewModel.openDeviceShortcut(ActionType.OPEN_SETTINGS, target = "write_settings") }
@@ -233,9 +276,9 @@ fun PermissionsScreen(
         item {
             PermissionRowCard(
                 icon = Icons.Rounded.BatterySaver,
-                title = "Battery Unrestricted (Lock-Screen Mode)",
-                description = "Optional: Set LEON AI to Unrestricted in Android battery settings so voice keeps running when locked.",
-                granted = false,
+                title = "Battery Unrestricted (Background & Swipe-Safe)",
+                description = "Set ALI AI to Unrestricted once so Recent Apps से हटाने के बाद भी बैकग्राउंड में चलता रहे।",
+                granted = batteryUnrestricted,
                 actionLabel = "Battery Settings",
                 onAction = { viewModel.openDeviceShortcut(ActionType.OPEN_SETTINGS, target = "battery") }
             )
@@ -277,7 +320,7 @@ fun PermissionsScreen(
                         text = if (telemetry.notificationListenerEnabled) {
                             "Notification Listener active. New incoming WhatsApp/SMS notifications will appear here."
                         } else {
-                            "Enable Notification Listener Access above so LEON can read messages aloud and draft WhatsApp replies."
+                            "Enable Notification Listener Access above so ALI AI can read messages aloud and draft WhatsApp replies."
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

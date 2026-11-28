@@ -158,7 +158,7 @@ fun CallAssistantScreen(
                         modifier = Modifier.testTag("call_screen_title")
                     )
                     Text(
-                        text = "जब आप कॉल रिसीव न कर पाएँ, तो LEON विनम्रता से बात करके रिपोर्ट सेव करेगा",
+                        text = "जब आप कॉल रिसीव न कर पाएँ, तो ALI AI विनम्रता से बात करके रिपोर्ट सेव करेगा",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -218,7 +218,7 @@ fun CallAssistantScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "रिंग तय सेकंड तक न उठाने पर LEON कॉल रिसीव कर लेगा",
+                                    text = "रिंग तय सेकंड तक न उठाने पर ALI AI कॉल रिसीव कर लेगा",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -524,7 +524,7 @@ fun CallAssistantScreen(
 
                     if (callState.activeCallState == "IDLE") {
                         Text(
-                            text = "बिना दूसरी सिम के अभी लाइव टेस्ट करें कि जब कोई कॉल आए और आप न उठा पाएँ, तो LEON AI कैसे बात करता है:",
+                            text = "बिना दूसरी सिम के अभी लाइव टेस्ट करें कि जब कोई कॉल आए और आप न उठा पाएँ, तो ALI AI कैसे बात करता है:",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -545,13 +545,13 @@ fun CallAssistantScreen(
                     } else {
                         // Active transcript turns
                         callState.activeTurns.forEachIndexed { idx, turn ->
-                            val isLeon = turn.speaker == "LEON AI"
+                            val isAli = turn.speaker == "ALI AI" || turn.speaker == "LEON AI"
                             Surface(
-                                color = if (isLeon) ArcCyan.copy(alpha = 0.14f) else NeuralViolet.copy(alpha = 0.16f),
+                                color = if (isAli) ArcCyan.copy(alpha = 0.14f) else NeuralViolet.copy(alpha = 0.16f),
                                 shape = RoundedCornerShape(14.dp),
                                 border = BorderStroke(
                                     1.dp,
-                                    if (isLeon) ArcCyan.copy(alpha = 0.5f) else NeuralViolet.copy(alpha = 0.5f)
+                                    if (isAli) ArcCyan.copy(alpha = 0.5f) else NeuralViolet.copy(alpha = 0.5f)
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -561,7 +561,7 @@ fun CallAssistantScreen(
                                     Text(
                                         text = turn.speaker,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (isLeon) ArcCyan else NeuralViolet,
+                                        color = if (isAli) ArcCyan else NeuralViolet,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
@@ -579,7 +579,7 @@ fun CallAssistantScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = ArcCyan)
-                                Text("LEON AI कॉलर के लिए जवाब सोच रहा है...", style = MaterialTheme.typography.bodySmall, color = ArcCyan)
+                                Text("ALI AI कॉलर के लिए जवाब सोच रहा है...", style = MaterialTheme.typography.bodySmall, color = ArcCyan)
                             }
                         }
 

@@ -251,7 +251,7 @@ class LeonCallReceptionistService : Service() {
             initialGreeting = greeting,
             isSimulation = false
         )
-        refreshNotification("LEON AI कॉल पर बात कर रहा है ($callerDisplay)")
+        refreshNotification("ALI AI कॉल पर बात कर रहा है ($callerDisplay)")
 
         // Give telecom audio bridge a short moment to establish before speaking greeting
         delay(850L)
@@ -519,7 +519,7 @@ class LeonCallReceptionistService : Service() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED
 
     private fun promoteToForeground(includeMic: Boolean) {
-        val notif = buildNotification("LEON AI कॉल रिसेप्शनिस्ट तैयार है")
+        val notif = buildNotification("ALI AI कॉल रिसेप्शनिस्ट तैयार है")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val type = if (includeMic) {
@@ -557,7 +557,7 @@ class LeonCallReceptionistService : Service() {
         )
         return NotificationCompat.Builder(this, CALL_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_leon_notification)
-            .setContentTitle("LEON AI • Call Receptionist")
+            .setContentTitle("ALI AI • Call Receptionist")
             .setContentText(subtitle)
             .setStyle(NotificationCompat.BigTextStyle().bigText(subtitle))
             .setOngoing(true)

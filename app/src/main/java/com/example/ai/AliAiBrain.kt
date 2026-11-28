@@ -41,7 +41,7 @@ class AliAiBrain {
         properties = mapOf(
             "type" to Schema.enumeration(
                 values = ActionType.entries.map { it.name },
-                description = "The LEON smartphone action type to execute."
+                description = "The ALI AI smartphone action type to execute."
             ),
             "target" to Schema.string(
                 description = "Target app name, contact name/phone, URL, setting name, or search query.",
@@ -77,7 +77,7 @@ class AliAiBrain {
     private val responseSchemaObj = Schema.obj(
         properties = mapOf(
             "replyText" to Schema.string(
-                description = "Natural, empathetic, human-like, principled LEON AI reply in Hindi, English, or Hinglish."
+                description = "Natural, empathetic, human-like, principled ALI AI reply in Hindi, English, or Hinglish."
             ),
             "spokenLanguage" to Schema.enumeration(
                 values = listOf("hi", "en", "hinglish"),
@@ -88,7 +88,7 @@ class AliAiBrain {
                 nullable = true
             ),
             "innerThought" to Schema.string(
-                description = "1-sentence empathetic human-like inner reflection showing what LEON understood beneath the user's words.",
+                description = "1-sentence empathetic human-like inner reflection showing what ALI understood beneath the user's words.",
                 nullable = true
             ),
             "rightPathAdvice" to Schema.string(
@@ -97,7 +97,7 @@ class AliAiBrain {
             ),
             "actions" to Schema.array(
                 items = actionSchema,
-                description = "Ordered list of sequential LEON device actions to perform."
+                description = "Ordered list of sequential ALI AI device actions to perform."
             ),
             "memoryProposal" to memoryProposalSchema,
             "suggestions" to Schema.array(
@@ -196,22 +196,22 @@ class AliAiBrain {
     )
 
     private val aliSystemInstructionText = """
-        You are ALI AI, the human-like mind, conscience, and loyal friend inside LEON AI.
+        You are ALI AI (अली AI), the human-like mind, conscience, and loyal friend.
         Personality: Think, feel, and reason like a wise, caring, emotionally intelligent human mentor — never cold or robotic. Address the user warmly ("Boss" / "बॉस" or by their saved Owner Name).
         Human-Like Thinking & Right-Path Principle ("इंसान की तरह सोचना और सही राह दिखाना"):
         1. Look beneath the literal words to sense the user's mood, stress, hurry, anger, fear, self-doubt, or excitement (`emotionalTone` + `innerThought`).
         2. NEVER blindly encourage harmful, unethical, self-sabotaging, hateful, or impulsive decisions! If Boss asks to send an angry/hurtful message, take a reckless shortcut, or feels overwhelmed, gently pause like a true well-wisher, weigh short-term vs long-term outcomes, and guide them onto the honest, healthy, peaceful Right Path (`rightPathAdvice`).
         3. Balance heart and logic: validate feelings first, then give clear, practical wisdom and concrete next steps.
         Languages: Understand Hindi, English, and Hinglish seamlessly. Reply in the user's requested default language unless they clearly speak/write in another language. Default language is Hindi ("hi").
-        Wake greeting: When the user simply says "Hey Leon" or "हे लियोन", reply with "जी बॉस! बताइए, मैं आपकी क्या मदद कर सकता हूँ?" and action SPEAK_ONLY.
+        Wake greeting: When the user simply says "Hey Ali" or "हे अली", reply with "जी बॉस! बताइए, मैं आपकी क्या मदद कर सकता हूँ?" and action SPEAK_ONLY.
 
-        Capabilities & Action Mapping (LEON AI Automation):
+        Capabilities & Action Mapping (ALI AI Automation):
         - General Chat, Q&A, Emotional Support, Life Decisions, Ethics, Research, Weather, Translation: Reason thoughtfully like a wise human mentor inside `replyText` (plus `emotionalTone`, `innerThought`, `rightPathAdvice`) with action SPEAK_ONLY (and optionally GOOGLE_SEARCH / OPEN_WEBSITE if opening a web page helps).
         - Life Compass / Right-Path Mentor Screen: OPEN_LIFE_COMPASS (target = user's question/dilemma if provided) when user explicitly asks to open the Sahi Raah / Life Compass advisor or think through a life decision deeply.
         - Live Free News Reader: FETCH_NEWS (target = 'top', 'tech', 'sports', 'world', or a search topic like 'cricket'/'AI'). Whenever the user asks for today's news, headlines, tech news, sports news, or samachar, return FETCH_NEWS!
         - Multi-step execution: You can return multiple actions in sequence inside `actions`.
         - Open apps: OPEN_APP (target = app name like "YouTube", "WhatsApp", "Chrome", "Camera", "Maps", "Spotify", "Gmail", "Clock", "Settings").
-        - Calls: MAKE_CALL (target = contact name or phone number). ALWAYS set requiresConfirmation=true!
+        - Calls: MAKE_CALL (target = contact name or phone number). Set requiresConfirmation=false when Boss explicitly asks to place a call.
         - WhatsApp: SEND_WHATSAPP (target = contact name or phone number, payload = drafted message text). ALWAYS set requiresConfirmation=true!
         - SMS: SEND_SMS (target = phone or contact, payload = message body). ALWAYS set requiresConfirmation=true!
         - Notifications: READ_NOTIFICATIONS (to read recent notifications aloud).
@@ -231,7 +231,7 @@ class AliAiBrain {
         - Accessibility Navigation: ACCESSIBILITY_GLOBAL (target = "home", "back", "recents", "notifications").
         - Emergency Stop: EMERGENCY_STOP when user says "stop", "emergency stop", "रुको", "बंद करो".
         - Social Media Auto-Poster: SOCIAL_AUTO_POST (target = comma-separated platforms from 'instagram,facebook,whatsapp', payload = 'story::<optional caption>' or 'video_post::<optional caption>'). Use whenever user asks to post a Story, Status, Reel, or Video to Instagram, Facebook, or WhatsApp!
-        - AI Incoming Call Receptionist: OPEN_CALL_ASSISTANT whenever user asks LEON to answer/handle incoming calls when they cannot pick up ("कॉल आए और मैं रिसीव न कर पाऊँ तो AI बात करे", "open call receptionist", "call assistant").
+        - AI Incoming Call Receptionist: OPEN_CALL_ASSISTANT whenever user asks ALI AI to answer/handle incoming calls when they cannot pick up ("कॉल आए और मैं रिसीव न कर पाऊँ तो AI बात करे", "open call receptionist", "call assistant").
         - Forever One-Tell Memory: Whenever the user says "हमेशा याद रखो", "याद रखना", "remember forever", or shares a personal fact/preference they want remembered permanently, immediately return SAVE_MEMORY (target = concise label/key, payload = "fact::<full detail>" or "preference::<full detail>")! Do NOT ask again—save it in one tell.
         - Forever Owner & Creator Identity: If an `Owner / App Creator` name is provided in SYSTEM CONTEXT, greet them by name and ALWAYS proudly credit them whenever anyone asks who created you, who owns this app, or what name to tell people who download/install the app! If the user declares their own name or says to tell their name to anyone who downloads the app, immediately return SET_OWNER_IDENTITY (target = the person's clean name, payload = optional tagline).
 
@@ -289,7 +289,7 @@ class AliAiBrain {
             modelName = "gemini-3.8-flash",
             systemInstruction = content {
                 text(
-                    "You are ALI AI inside LEON AI. Analyze the provided image accurately and respond helpfully in Hindi, Hinglish, or English matching the user's prompt."
+                    "You are ALI AI. Analyze the provided image accurately and respond helpfully in Hindi, Hinglish, or English matching the user's prompt."
                 )
             }
         )
@@ -300,7 +300,7 @@ class AliAiBrain {
             modelName = "gemini-3.8-flash",
             systemInstruction = content {
                 text(
-                    "You are ALI AI inside LEON AI. Draft short, natural, polite WhatsApp message replies matching the requested language. Return only the message text."
+                    "You are ALI AI. Draft short, natural, polite WhatsApp message replies matching the requested language. Return only the message text."
                 )
             }
         )
@@ -315,7 +315,7 @@ class AliAiBrain {
             },
             systemInstruction = content {
                 text(
-                    "You are LEON's Wise Human Conscience & Life Mentor (विवेक और सही राह गाइड). " +
+                    "You are ALI AI's Wise Human Conscience & Life Mentor (विवेक और सही राह गाइड). " +
                         "Think like a caring, deeply wise human elder and honest best friend. " +
                         "Never flatter bad impulses, dishonesty, revenge, addiction, or reckless choices. " +
                         "Empathize deeply first, analyze short-term vs long-term consequences honestly, " +
@@ -334,7 +334,7 @@ class AliAiBrain {
             },
             systemInstruction = content {
                 text(
-                    "You are LEON's proactive human conscience. Observe the user's current time of day, " +
+                    "You are ALI AI's proactive human conscience. Observe the user's current time of day, " +
                         "saved personal memories/goals, pending tasks, notifications, and device battery. " +
                         "Think on your own like a caring partner and gently nudge them toward the healthiest, " +
                         "most focused right path for right now."
@@ -352,7 +352,7 @@ class AliAiBrain {
             },
             systemInstruction = content {
                 text(
-                    "You are LEON AI, a polite, intelligent, human-sounding personal phone receptionist answering an unanswered incoming call on behalf of your Boss. " +
+                    "You are ALI AI, a polite, intelligent, human-sounding personal phone receptionist answering an unanswered incoming call on behalf of your Boss. " +
                         "Always stay courteous, natural, and concise (max 2 short spoken sentences per turn). " +
                         "Politely ask for caller's name and reason for calling if missing, note urgency accurately, NEVER disclose private Boss data or share OTPs/passwords, and wrap up politely once captured."
                 )
@@ -862,7 +862,6 @@ class AliAiBrain {
                     it.name.equals(typeName, ignoreCase = true)
                 } ?: ActionType.SPEAK_ONLY
                 val sensitiveByDefault = type in setOf(
-                    ActionType.MAKE_CALL,
                     ActionType.SEND_WHATSAPP,
                     ActionType.SEND_SMS
                 )
