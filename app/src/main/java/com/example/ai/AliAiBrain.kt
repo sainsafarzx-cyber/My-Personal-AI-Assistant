@@ -936,12 +936,28 @@ class AliAiBrain {
     }
 
     companion object {
+        fun isConfigOrPermissionIssue(error: Throwable): Boolean {
+            val combined = generateSequence(error) { it.cause }
+                .mapNotNull { it.localizedMessage?.trim() }
+                .joinToString(" ")
+            return combined.contains("FirebaseApp", ignoreCase = true) ||
+                combined.contains("not initialized", ignoreCase = true) ||
+                combined.contains("google-services", ignoreCase = true) ||
+                combined.contains("403") ||
+                combined.contains("app check", ignoreCase = true) ||
+                combined.contains("attestation", ignoreCase = true) ||
+                combined.contains("API key", ignoreCase = true)
+        }
+
         fun describeError(error: Throwable): String {
             val chain = generateSequence(error) { it.cause }.toList()
             val messages = chain.mapNotNull { it.localizedMessage?.trim() }
                 .filter { it.isNotEmpty() }
                 .distinct()
             val combined = messages.joinToString(" -> ").take(240)
+            val isFirebaseUnconfigured = combined.contains("FirebaseApp", ignoreCase = true) ||
+                combined.contains("not initialized", ignoreCase = true) ||
+                combined.contains("google-services", ignoreCase = true)
             val isTimeout = error is TimeoutCancellationException ||
                 chain.any { it is SocketTimeoutException } ||
                 combined.contains("timeout", ignoreCase = true)
@@ -962,6 +978,7 @@ class AliAiBrain {
             }
 
             return when {
+                isFirebaseUnconfigured -> "Cloud AI config missing (google-services.json not bundled in this APK)"
                 isAppCheck -> "App Check / Firebase permission error (403)$appCheckHint: $combined"
                 isTimeout -> "Request timed out. Please check internet speed and try again."
                 isNetwork -> "Internet / DNS unavailable: ${combined.ifBlank { error::class.java.simpleName }}"

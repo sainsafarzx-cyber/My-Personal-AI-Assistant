@@ -14,6 +14,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -32,6 +34,7 @@ import com.example.MainActivity
 import com.example.R
 import com.example.ai.AliAiBrain
 import com.example.ai.LocalCommandRouter
+import com.example.ai.PublicKnowledgeFallback
 import com.example.audio.LeonSpeaker
 import com.example.automation.LeonActionExecutor
 import com.example.data.ActionType
@@ -239,6 +242,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
     private var currentLanguage = AssistantLanguage.HINDI
     private var speechSpeed = 1.0f
     private var isListening = false
+    private var useOfflineRecognizerNext = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastSpokenRawText = ""
     private var lastSpokenWasPhoneticFallback = false
@@ -526,6 +530,16 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             am.mode == android.media.AudioManager.MODE_IN_COMMUNICATION
     }
 
+    private fun isNetworkConnectedFast(): Boolean {
+        return runCatching {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return@runCatching false
+            val network = cm.activeNetwork ?: return@runCatching false
+            val caps = cm.getNetworkCapabilities(network) ?: return@runCatching false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        }.getOrDefault(false)
+    }
+
     @SuppressLint("WakelockTimeout")
     private fun ensureWakeLockHeld() {
         try {
@@ -716,7 +730,12 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
             return
         }
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+        val canOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        val canStandard = SpeechRecognizer.isRecognitionAvailable(this)
+
+        if (!canStandard && !canOnDevice) {
+            useOfflineRecognizerNext = false
             awaitingActiveCommand = false
             LeonMusicEngine.setDucked(false)
             VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
@@ -730,16 +749,24 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 }
             }
             VoiceServiceBridge.emitEvent(
-                VoiceServiceEvent.ErrorOccurred("Speech recognition service unavailable on this device. Please type your command below.")
+                VoiceServiceEvent.ErrorOccurred("इस फ़ोन में वॉइस पहचान सर्विस उपलब्ध नहीं है — कृपया टाइप करके कमांड दें।")
             )
             return
         }
+
+        val preferOffline = useOfflineRecognizerNext || !canStandard || !isNetworkConnectedFast()
+        useOfflineRecognizerNext = false
+
         try {
             stopRecognizerInternal()
             if (awaitingActiveCommand) {
                 LeonMusicEngine.setDucked(true)
             }
-            val recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            val recognizer = if (preferOffline && canOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+            } else {
+                SpeechRecognizer.createSpeechRecognizer(this)
+            }
             speechRecognizer = recognizer
             recognizer.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
@@ -765,11 +792,25 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 }
 
                 override fun onError(error: Int) {
-                    isListening = false
-                    mainHandler.removeCallbacks(listenWatchdogRunnable)
+                    stopRecognizerInternal()
                     LeonMusicEngine.setDucked(false)
                     VoiceServiceBridge.setPartialTranscript("")
+                    val isRetryableRecognizerError = error == SpeechRecognizer.ERROR_NETWORK ||
+                        error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
+                        error == SpeechRecognizer.ERROR_SERVER ||
+                        error == SpeechRecognizer.ERROR_CLIENT ||
+                        error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+                        error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
+
                     if (alwaysReadyMode) {
+                        if (isRetryableRecognizerError && !preferOffline && (canOnDevice || canStandard)) {
+                            useOfflineRecognizerNext = true
+                            VoiceServiceBridge.setOrbState(
+                                if (awaitingActiveCommand) VoiceOrbState.ACTIVE_LISTENING else VoiceOrbState.WAKE_LISTENING
+                            )
+                            scheduleListen(350L)
+                            return
+                        }
                         awaitingActiveCommand = false
                         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                             alwaysReadyMode = false
@@ -780,7 +821,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                                 isPromotedForeground = false
                             }
                             VoiceServiceBridge.emitEvent(
-                                VoiceServiceEvent.ErrorOccurred("Microphone permission revoked. Always-Ready stopped.")
+                                VoiceServiceEvent.ErrorOccurred("माइक्रोफ़ोन परमिशन बंद होने से Always-Ready रुक गया।")
                             )
                         } else if (!lockScreenModeEnabled && isDeviceLocked()) {
                             VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
@@ -796,6 +837,12 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                             scheduleListen(backoff)
                         }
                     } else {
+                        if (isRetryableRecognizerError && !preferOffline && (canOnDevice || canStandard)) {
+                            useOfflineRecognizerNext = true
+                            VoiceServiceBridge.setOrbState(VoiceOrbState.ACTIVE_LISTENING)
+                            scheduleListen(250L)
+                            return
+                        }
                         awaitingActiveCommand = false
                         VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
                         val uiActive = VoiceServiceBridge.foregroundUiActive.value && !isDeviceLocked()
@@ -809,7 +856,12 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                                     if (!LeonMusicEngine.isPlaying()) releaseWakeLock()
                                     VoiceServiceBridge.emitEvent(VoiceServiceEvent.SpeechFallbackRequested)
                                 } else {
-                                    speakText("बॉस, नेटवर्क की वजह से वॉइस पहचान में दिक्कत आ रही है।", AssistantLanguage.HINDI)
+                                    val spokenError = if (isNetworkConnectedFast()) {
+                                        "बॉस, वॉइस पहचान सर्विस अभी व्यस्त है — कृपया एक सेकंड बाद दुबारा बोलें।"
+                                    } else {
+                                        "बॉस, इंटरनेट बंद है और ऑफ़लाइन वॉइस पैक उपलब्ध नहीं है — कृपया इंटरनेट चालू करें।"
+                                    }
+                                    speakText(spokenError, AssistantLanguage.HINDI)
                                 }
                             }
                             SpeechRecognizer.ERROR_AUDIO -> {
@@ -818,14 +870,14 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                                     VoiceServiceBridge.emitEvent(VoiceServiceEvent.SpeechFallbackRequested)
                                 } else {
                                     VoiceServiceBridge.emitEvent(
-                                        VoiceServiceEvent.ErrorOccurred("Microphone audio error. Check device mic or type your command.")
+                                        VoiceServiceEvent.ErrorOccurred("माइक्रोफ़ोन ऑडियो एरर — कृपया माइक जांचें या टाइप करें।")
                                     )
                                 }
                             }
                             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                                 if (!LeonMusicEngine.isPlaying()) releaseWakeLock()
                                 VoiceServiceBridge.emitEvent(
-                                    VoiceServiceEvent.ErrorOccurred("Microphone permission is required.")
+                                    VoiceServiceEvent.ErrorOccurred("वॉइस कमांड के लिए माइक्रोफ़ोन परमिशन ज़रूरी है।")
                                 )
                             }
                             SpeechRecognizer.ERROR_NO_MATCH,
@@ -833,7 +885,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                                 if (!LeonMusicEngine.isPlaying()) releaseWakeLock()
                                 if (uiActive) {
                                     VoiceServiceBridge.emitEvent(
-                                        VoiceServiceEvent.ErrorOccurred("Didn't catch voice input. Tap the mic orb again or type below.")
+                                        VoiceServiceEvent.ErrorOccurred("आवाज़ साफ़ नहीं सुनाई दी — दुबारा Voice Orb दबाएं या टाइप करें।")
                                     )
                                 }
                             }
@@ -843,7 +895,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                                     VoiceServiceBridge.emitEvent(VoiceServiceEvent.SpeechFallbackRequested)
                                 } else {
                                     VoiceServiceBridge.emitEvent(
-                                        VoiceServiceEvent.ErrorOccurred("Voice capture unavailable (code $error). Try typing your command.")
+                                        VoiceServiceEvent.ErrorOccurred("वॉइस कैप्चर उपलब्ध नहीं है (code $error) — कृपया टाइप करें।")
                                     )
                                 }
                             }
@@ -852,11 +904,10 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 }
 
                 override fun onResults(results: Bundle?) {
-                    isListening = false
-                    mainHandler.removeCallbacks(listenWatchdogRunnable)
-                    LeonMusicEngine.setDucked(false)
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val spoken = matches?.firstOrNull()?.trim().orEmpty()
+                    stopRecognizerInternal()
+                    LeonMusicEngine.setDucked(false)
                     VoiceServiceBridge.setPartialTranscript("")
                     handleSpokenText(spoken)
                 }
@@ -880,14 +931,16 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, currentLanguage.localeTag)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                if (preferOffline) {
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                }
             }
             mainHandler.postDelayed(listenWatchdogRunnable, LISTEN_WATCHDOG_MS)
             recognizer.startListening(recogIntent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start SpeechRecognizer", e)
-            isListening = false
+            stopRecognizerInternal()
             awaitingActiveCommand = false
-            mainHandler.removeCallbacks(listenWatchdogRunnable)
             LeonMusicEngine.setDucked(false)
             VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
             if (alwaysReadyMode) scheduleListen(1500L)
@@ -1045,25 +1098,46 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                     ownerName = prefs.ownerName,
                     memories = snapshot.memories
                 )
-                if (offlineRecovery != null) {
+                val recoveryResult = offlineRecovery ?: if (telemetry.internetConnected) {
+                    PublicKnowledgeFallback.tryLookupAnswer(
+                        rawPrompt = clean,
+                        defaultLanguage = lang,
+                        ownerName = prefs.ownerName
+                    )
+                } else {
+                    null
+                }
+                if (recoveryResult != null) {
                     applyAutonomousBrainResult(
-                        brainResult = offlineRecovery,
+                        brainResult = recoveryResult,
                         lang = lang,
                         locked = lockedOrScreenOff,
                         canWriteSettings = telemetry.writeSettingsGranted,
                         memories = snapshot.memories
                     )
                 } else {
-                    val errMsg = AliAiBrain.describeError(err)
-                    val failText = "माफ़ कीजिए बॉस, ALI AI अभी नेटवर्क से जुड़ नहीं पाई ($errMsg)। आप ऑफ़लाइन में भी 'गाना बजाओ', 'टॉर्च ऑन', 'कॉल लगाओ', 'वॉल्यूम बढ़ाओ' या 'बैटरी बताओ' बोल सकते हैं।"
+                    val configIssue = AliAiBrain.isConfigOrPermissionIssue(err)
+                    val failText = when {
+                        configIssue ->
+                            "बॉस, आपकी आवाज़ मिल गई! इस बिल्ड में Cloud AI कॉन्फ़िग नहीं जुड़ा है, लेकिन 'गाना बजाओ', 'टॉर्च ऑन', 'कॉल लगाओ', 'समय बताओ', 'ताज़ा न्यूज़', 'वॉल्यूम बढ़ाओ' और 'बैटरी बताओ' जैसे सभी कमांड तुरंत चल रहे हैं!"
+                        !telemetry.internetConnected ->
+                            "बॉस, अभी इंटरनेट बंद है। ऑफ़लाइन में भी 'गाना बजाओ', 'टॉर्च ऑन', 'कॉल लगाओ', 'वॉल्यूम बढ़ाओ' या 'बैटरी बताओ' बोल सकते हैं।"
+                        else ->
+                            "बॉस, क्लाउड AI से अभी जवाब नहीं मिल पाया। लेकिन 'गाना बजाओ', 'टॉर्च ऑन', 'कॉल लगाओ', 'वॉल्यूम बढ़ाओ' और 'बैटरी बताओ' अभी भी तैयार हैं।"
+                    }
                     repository.addConversationMessage(
                         role = "model",
                         text = failText,
                         language = lang,
-                        actionSummary = "ERROR"
+                        actionSummary = "INFO"
                     )
+                    val spokenError = when {
+                        configIssue -> "बॉस, इस बिल्ड में क्लाउड AI सेट नहीं है — लेकिन कॉलिंग, म्यूजिक, न्यूज़, टॉर्च और वॉल्यूम बिना रुकावट चल रहे हैं।"
+                        !telemetry.internetConnected -> "बॉस, अभी इंटरनेट बंद है — लेकिन कॉलिंग, म्यूजिक, टॉर्च और वॉल्यूम ऑफ़लाइन भी चल रहे हैं।"
+                        else -> "बॉस, क्लाउड AI सर्वर से अभी जवाब नहीं मिला — लेकिन कॉलिंग, म्यूजिक, टॉर्च और वॉल्यूम तैयार हैं।"
+                    }
                     withContext(Dispatchers.Main) {
-                        speakText("माफ़ कीजिए बॉस, इंटरनेट समस्या है — लेकिन कॉलिंग, म्यूजिक, टॉर्च और वॉल्यूम ऑफ़लाइन भी चल रहे हैं।", AssistantLanguage.HINDI)
+                        speakText(spokenError, AssistantLanguage.HINDI)
                     }
                 }
             }

@@ -168,17 +168,23 @@ fun HudDashboardScreen(
 
     val preferredLocaleTag = prefs?.let { AssistantLanguage.fromCode(it.defaultLanguage).localeTag } ?: "hi-IN"
     val latestPreferredLocaleTag by rememberUpdatedState(preferredLocaleTag)
+    val latestInternetConnected by rememberUpdatedState(telemetry.internetConnected)
 
     var fgRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     var isFgListening by remember { mutableStateOf(false) }
 
+    val destroyFgRecognizer: () -> Unit = {
+        runCatching {
+            fgRecognizer?.cancel()
+            fgRecognizer?.destroy()
+        }
+        fgRecognizer = null
+        isFgListening = false
+    }
+
     DisposableEffect(Unit) {
         onDispose {
-            runCatching {
-                fgRecognizer?.cancel()
-                fgRecognizer?.destroy()
-            }
-            fgRecognizer = null
+            destroyFgRecognizer()
             viewModel.finishForegroundMicCapture(capturedTranscript = false)
         }
     }
@@ -204,26 +210,145 @@ fun HudDashboardScreen(
 
     val speechFallbackTrigger by viewModel.speechFallbackTrigger.collectAsStateWithLifecycle()
 
-    val launchSpeechIntentFallback: () -> Unit = {
+    val launchSpeechIntentFallback: (Boolean) -> Unit = { preferOffline ->
+        destroyFgRecognizer()
         viewModel.prepareForegroundMicCapture()
         val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, latestPreferredLocaleTag)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, latestPreferredLocaleTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            if (preferOffline || !latestInternetConnected) {
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            }
             putExtra(RecognizerIntent.EXTRA_PROMPT, "बोलिए बॉस — LEON सुन रहा है...")
         }
         if (speechIntent.resolveActivity(context.packageManager) != null) {
             speechIntentLauncher.launch(speechIntent)
         } else {
             viewModel.finishForegroundMicCapture(capturedTranscript = false)
-            viewModel.reportError("Voice speech service network unavailable — please type your command below.")
+            viewModel.reportError("इस फ़ोन पर वॉइस स्पीच सर्विस उपलब्ध नहीं है — कृपया नीचे टाइप करके कमांड दें।")
         }
     }
 
     LaunchedEffect(speechFallbackTrigger) {
         if (speechFallbackTrigger > 0) {
-            launchSpeechIntentFallback()
+            launchSpeechIntentFallback(!latestInternetConnected)
+        }
+    }
+
+    fun startRecognizerSession(preferOffline: Boolean) {
+        val canOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        val canStandard = SpeechRecognizer.isRecognitionAvailable(context)
+
+        if (!canStandard && !canOnDevice) {
+            launchSpeechIntentFallback(preferOffline || !latestInternetConnected)
+            return
+        }
+
+        val effectiveOffline = preferOffline || !canStandard
+        // Always destroy any previous SpeechRecognizer instance to prevent OEM ERROR_CLIENT/busy hangs
+        destroyFgRecognizer()
+        viewModel.prepareForegroundMicCapture()
+
+        val started = runCatching {
+            val created = if (effectiveOffline && canOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+            } else {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            }
+            created.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    isFgListening = true
+                    viewModel.updateForegroundOrbListening(VoiceOrbState.ACTIVE_LISTENING, "")
+                }
+
+                override fun onBeginningOfSpeech() {
+                    isFgListening = true
+                }
+
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+
+                override fun onEndOfSpeech() {
+                    isFgListening = false
+                }
+
+                override fun onError(error: Int) {
+                    destroyFgRecognizer()
+                    when (error) {
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                            viewModel.finishForegroundMicCapture(capturedTranscript = false)
+                            viewModel.reportError("वॉइस कमांड के लिए माइक्रोफ़ोन परमिशन ज़रूरी है।")
+                        }
+                        SpeechRecognizer.ERROR_NO_MATCH,
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                            viewModel.finishForegroundMicCapture(capturedTranscript = false)
+                            viewModel.reportError("आवाज़ साफ़ नहीं सुनाई दी — दुबारा Voice Orb दबाएं या टाइप करें।")
+                        }
+                        else -> {
+                            if (!effectiveOffline) {
+                                // Retry once immediately using offline/on-device speech recognition
+                                startRecognizerSession(preferOffline = true)
+                            } else {
+                                launchSpeechIntentFallback(true)
+                            }
+                        }
+                    }
+                }
+
+                override fun onResults(results: Bundle?) {
+                    val spoken = results
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                        ?.trim()
+                        .orEmpty()
+                    destroyFgRecognizer()
+                    if (spoken.isNotBlank()) {
+                        viewModel.finishForegroundMicCapture(capturedTranscript = true)
+                        viewModel.submitPrompt(spoken, speakResponse = true)
+                    } else {
+                        viewModel.finishForegroundMicCapture(capturedTranscript = false)
+                    }
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                        .orEmpty()
+                    if (partial.isNotBlank()) {
+                        viewModel.updateForegroundOrbListening(VoiceOrbState.ACTIVE_LISTENING, partial)
+                    }
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            fgRecognizer = created
+
+            val listenIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, latestPreferredLocaleTag)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, latestPreferredLocaleTag)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                if (effectiveOffline || !latestInternetConnected) {
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                }
+            }
+            isFgListening = true
+            created.startListening(listenIntent)
+            true
+        }.getOrDefault(false)
+
+        if (!started) {
+            destroyFgRecognizer()
+            if (!effectiveOffline) {
+                startRecognizerSession(preferOffline = true)
+            } else {
+                launchSpeechIntentFallback(true)
+            }
         }
     }
 
@@ -231,92 +356,8 @@ fun HudDashboardScreen(
         if (isFgListening) {
             isFgListening = false
             runCatching { fgRecognizer?.stopListening() }
-        } else if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            launchSpeechIntentFallback()
         } else {
-            viewModel.prepareForegroundMicCapture()
-            val started = runCatching {
-                val recognizer = fgRecognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { created ->
-                    created.setRecognitionListener(object : RecognitionListener {
-                        override fun onReadyForSpeech(params: Bundle?) {
-                            isFgListening = true
-                            viewModel.updateForegroundOrbListening(VoiceOrbState.ACTIVE_LISTENING, "")
-                        }
-
-                        override fun onBeginningOfSpeech() {
-                            isFgListening = true
-                        }
-
-                        override fun onRmsChanged(rmsdB: Float) {}
-                        override fun onBufferReceived(buffer: ByteArray?) {}
-
-                        override fun onEndOfSpeech() {
-                            isFgListening = false
-                        }
-
-                        override fun onError(error: Int) {
-                            isFgListening = false
-                            when (error) {
-                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                                    viewModel.finishForegroundMicCapture(capturedTranscript = false)
-                                    viewModel.reportError("Microphone permission is required for voice commands.")
-                                }
-                                SpeechRecognizer.ERROR_NO_MATCH,
-                                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
-                                    viewModel.finishForegroundMicCapture(capturedTranscript = false)
-                                    viewModel.reportError("आवाज़ साफ़ नहीं सुनाई दी — दुबारा Voice Orb दबाएं या टाइप करें।")
-                                }
-                                else -> {
-                                    launchSpeechIntentFallback()
-                                }
-                            }
-                        }
-
-                        override fun onResults(results: Bundle?) {
-                            isFgListening = false
-                            val spoken = results
-                                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                                ?.firstOrNull()
-                                ?.trim()
-                                .orEmpty()
-                            if (spoken.isNotBlank()) {
-                                viewModel.finishForegroundMicCapture(capturedTranscript = true)
-                                viewModel.submitPrompt(spoken, speakResponse = true)
-                            } else {
-                                viewModel.finishForegroundMicCapture(capturedTranscript = false)
-                            }
-                        }
-
-                        override fun onPartialResults(partialResults: Bundle?) {
-                            val partial = partialResults
-                                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                                ?.firstOrNull()
-                                .orEmpty()
-                            if (partial.isNotBlank()) {
-                                viewModel.updateForegroundOrbListening(VoiceOrbState.ACTIVE_LISTENING, partial)
-                            }
-                        }
-
-                        override fun onEvent(eventType: Int, params: Bundle?) {}
-                    })
-                    fgRecognizer = created
-                }
-                val listenIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, latestPreferredLocaleTag)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, latestPreferredLocaleTag)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                }
-                isFgListening = true
-                recognizer.startListening(listenIntent)
-                true
-            }.getOrDefault(false)
-
-            if (!started) {
-                isFgListening = false
-                launchSpeechIntentFallback()
-            }
+            startRecognizerSession(preferOffline = !latestInternetConnected)
         }
     }
 
@@ -444,6 +485,9 @@ fun HudDashboardScreen(
                 lockScreenModeEnabled = lockScreenModeEnabled,
                 ownerName = ownerName,
                 onOrbClick = {
+                    if (isSpeaking) {
+                        viewModel.stopSpeaking()
+                    }
                     val granted = ContextCompat.checkSelfPermission(
                         context,
                         Manifest.permission.RECORD_AUDIO

@@ -173,11 +173,20 @@ object LocalCommandRouter {
                     suggestions = listOf("ताज़ा न्यूज़ सुनाओ", "गाना बजाओ")
                 )
             }
-            lower.contains("good morning") || lower.contains("सुप्रभात") || lower.contains("good night") || lower.contains("शुभ रात्रि") -> {
-                val greet = if (lower.contains("night") || lower.contains("रात्रि")) {
-                    "शुभ रात्रि $boss! मीठे सपने, अलार्म या स्लीप म्यूजिक लगाना हो तो बताइए।"
-                } else {
-                    "सुप्रभात $boss! आज का दिन शानदार रहे — क्या मैं आज की ताज़ा न्यूज़ सुनाऊँ?"
+            lower.contains("good morning") || lower.contains("सुप्रभात") ||
+                lower.contains("गुड मॉर्निंग") || lower.contains("good night") ||
+                lower.contains("शुभ रात्रि") || lower.contains("गुड नाइट") ||
+                lower.contains("good afternoon") || lower.contains("good evening") ||
+                lower.contains("शुभ संध्या") -> {
+                val greet = when {
+                    lower.contains("night") || lower.contains("रात्रि") || lower.contains("नाइट") ->
+                        "शुभ रात्रि $boss! मीठे सपने, अलार्म या स्लीप म्यूजिक लगाना हो तो बताइए।"
+                    lower.contains("evening") || lower.contains("संध्या") ->
+                        "शुभ संध्या $boss! बताइए, शाम के लिए कोई ताज़ा न्यूज़ या गाना बजाऊँ?"
+                    lower.contains("afternoon") ->
+                        "गुड आफ्टरनून $boss! बताइए अभी क्या काम करना है?"
+                    else ->
+                        "सुप्रभात $boss! आज का दिन शानदार रहे — क्या मैं आज की ताज़ा न्यूज़ सुनाऊँ?"
                 }
                 AliBrainResult(
                     replyText = greet,
@@ -189,6 +198,51 @@ object LocalCommandRouter {
             lower.contains("joke") || lower.contains("चुटकुला") || lower.contains("हंसाओ") -> {
                 AliBrainResult(
                     replyText = "सुनिए $boss: मास्टर जी ने पूछा — 'बिजली कहाँ से आती है?' पप्पू बोला — 'सर, मामा के घर से! जब भी जाती है, पापा कहते हैं साले फिर काट गए!' हा हा!",
+                    spokenLanguage = AssistantLanguage.HINDI,
+                    actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
+                    suggestions = listOf("ताज़ा न्यूज़ सुनाओ", "गाना बजाओ")
+                )
+            }
+            lower.contains("शायरी") || lower.contains("shayari") ||
+                lower.contains("सुविचार") || lower.contains("motivat") ||
+                lower.contains("मोटिवेशन") || lower.contains("quote") -> {
+                AliBrainResult(
+                    replyText = "सुनिए $boss: 'मंज़िलें उन्हें नहीं मिलतीं जिनके ख्वाब बड़े होते हैं, बल्कि उन्हें मिलती हैं जो अपनी जिद पर अड़े होते हैं।' आगे बढ़िए, मैं आपके साथ हूँ!",
+                    spokenLanguage = AssistantLanguage.HINDI,
+                    actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
+                    suggestions = listOf("सही राह कम्पास खोलो", "गाना बजाओ")
+                )
+            }
+            lower.contains("सुन रहे") || lower.contains("आवाज आ रही") || lower.contains("आवाज़ आ रही") ||
+                lower.contains("can you hear") || lower.contains("hello leon") || lower.contains("हेल्लो") ||
+                lower.contains("बोल क्यों नहीं") || lower.contains("बात करो") || lower.contains("काम नहीं कर") -> {
+                AliBrainResult(
+                    replyText = "जी $boss, आपकी आवाज़ बिल्कुल साफ़ आ रही है और मैं सक्रिय हूँ! बोलिए क्या काम करना है?",
+                    spokenLanguage = AssistantLanguage.HINDI,
+                    actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
+                    suggestions = listOf("समय बताओ", "गाना बजाओ", "फ्लैशलाइट ऑन करो")
+                )
+            }
+            lower.contains("कहानी") || lower.contains("story") -> {
+                AliBrainResult(
+                    replyText = "सुनिए $boss: एक छोटे गांव में एक कारीगर रोज़ एक नया दिया जलाता था ताकि अंधेरी रात में कोई राहगीर भटके नहीं। किसी ने पूछा इससे क्या बदलेगा? उसने मुस्कुराकर कहा — 'पूरा शहर नहीं, कम से कम मेरे सामने का रास्ता तो रोशन रहेगा!'",
+                    spokenLanguage = AssistantLanguage.HINDI,
+                    actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
+                    suggestions = listOf("चुटकुला सुनाओ", "गाना बजाओ")
+                )
+            }
+            lower.contains("बाय") || lower == "bye" || lower.contains("goodbye") || lower.contains("अलविदा") -> {
+                AliBrainResult(
+                    replyText = "ठीक है $boss, जब भी ज़रूरत हो बस 'Hey Leon' बोलिएगा। आपका दिन शुभ रहे!",
+                    spokenLanguage = AssistantLanguage.HINDI,
+                    actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
+                    suggestions = listOf("समय बताओ", "गाना बजाओ")
+                )
+            }
+            lower.contains("शाबाश") || lower.contains("वेरी गुड") || lower.contains("बहुत अच्छे") ||
+                lower.contains("good job") || lower.contains("nice") || lower.contains("love you") -> {
+                AliBrainResult(
+                    replyText = "बहुत शुक्रिया $boss! आपकी सेवा करना ही मेरा सबसे बड़ा काम है।",
                     spokenLanguage = AssistantLanguage.HINDI,
                     actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
                     suggestions = listOf("ताज़ा न्यूज़ सुनाओ", "गाना बजाओ")
@@ -376,35 +430,49 @@ object LocalCommandRouter {
         // 1. Wake / Greetings / Assistant Intro
         if (lower in setOf(
                 "hey leon", "hi leon", "ok leon", "hello leon", "hey ali", "ok ali",
-                "हे लियोन", "हे लिऑन", "नमस्ते", "namaste", "hi", "hello",
-                "कैसे हो", "kaise ho", "how are you", "leon", "ali", "अली", "लियोन"
+                "हे लियोन", "हे लिऑन", "नमस्ते", "namaste", "hi", "hello", "हेलो", "हाय",
+                "सलाम", "salam", "अस्सलाम वालेकुम", "सुनो", "बोलो", "सुनाओ", "ठीक है", "अच्छा",
+                "कैसे हो", "कैसे हैं", "कैसा है", "कैसी हो", "क्या हाल है", "क्या हाल", "kaise ho", "how are you",
+                "leon", "ali", "अली", "लियोन", "ओ लियोन", "अरे लियोन", "लियोन भाई", "टेस्ट", "test"
             )
         ) {
             val bossLabel = if (ownerName.isNotBlank()) "$ownerName बॉस" else "बॉस"
             val reply = when {
-                lower.contains("कैसे") || lower.contains("kaise") || lower.contains("how are") ->
-                    "बिल्कुल शानदार $bossLabel! मैं पूरी तरह तैयार हूँ — म्यूजिक, टॉर्च, ब्राइटनेस, Wi-Fi या किसी भी काम के लिए बोलिए।"
+                lower.contains("कैसे") || lower.contains("कैसा") || lower.contains("कैसी") ||
+                    lower.contains("हाल") || lower.contains("kaise") || lower.contains("how are") ->
+                    "बिल्कुल शानदार $bossLabel! मैं पूरी तरह तैयार हूँ — म्यूजिक, टॉर्च, कॉल, ब्राइटनेस, Wi-Fi या किसी भी काम के लिए बोलिए।"
+                lower == "सलाम" || lower == "salam" || lower.contains("अस्सलाम") ->
+                    "वालेकुम अस्सलाम $bossLabel! बताइए, मैं आपकी क्या मदद कर सकता हूँ?"
                 else -> "जी $bossLabel! बताइए, मैं आपकी क्या मदद कर सकता हूँ?"
             }
             return AliBrainResult(
                 replyText = reply,
                 spokenLanguage = AssistantLanguage.HINDI,
                 actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
-                suggestions = listOf("गाना बजाओ", "फ्लैशलाइट ऑन करो", "Wi-Fi खोलो")
+                suggestions = listOf("गाना बजाओ", "समय बताओ", "फ्लैशलाइट ऑन करो")
             )
         }
 
-        if (lower.contains("तुम कौन हो") || lower.contains("आप कौन") || lower.contains("who are you") ||
-            lower.contains("क्या कर सकते हो") || lower.contains("what can you do") ||
-            lower == "help" || lower == "मदद"
-        ) {
+        val asksIdentityOrCapabilities =
+            lower.contains("तुम कौन") || lower.contains("आप कौन") || lower.contains("who are you") ||
+                lower.contains("तुम्हारा नाम") || lower.contains("आपका नाम") ||
+                lower.contains("what is your name") || lower.contains("what's your name") ||
+                lower.contains("तुम क्या हो") || lower.contains("आप क्या हैं") ||
+                lower.contains("किस काम आ") ||
+                Regex("(?:क्या[-\\s]*क्या|क्या)\\s*कर\\s*(?:सकते|सकती|सकता)").containsMatchIn(lower) ||
+                lower.contains("kya kar sakte") || lower.contains("kya kar sakti") ||
+                lower.contains("kya kya kar") || lower.contains("what can you do") ||
+                lower.contains("your features") || lower.contains("तुम्हारे फीचर") ||
+                lower == "help" || lower == "मदद" || lower == "मदद करो" || lower == "हेल्प"
+
+        if (asksIdentityOrCapabilities) {
             val bossLabel = if (ownerName.isNotBlank()) "$ownerName बॉस" else "बॉस"
             val ownerLine = if (ownerName.isNotBlank()) " मेरे क्रिएटर $ownerName जी हैं।" else ""
             return AliBrainResult(
-                replyText = "जी $bossLabel, मैं LEON AI (powered by ALI AI) हूँ!$ownerLine मैं टॉर्च, ब्राइटनेस, वॉल्यूम, Wi-Fi, ऐप्स खोलने, लॉक-स्क्रीन म्यूजिक व टाइमर, Sixth Sense सेंसर और आपकी बातें हमेशा के लिए याद रखने का काम कर सकता हूँ।",
+                replyText = "जी $bossLabel, मैं LEON AI (powered by ALI AI) हूँ!$ownerLine मैं किसी को फ़ोन कॉल लगाने, कॉल रिसीव असिस्टेंट चलाने, टॉर्च/ब्राइटनेस/वॉल्यूम/Wi-Fi कंट्रोल करने, ऐप्स व YouTube खोलने, लॉक-स्क्रीन म्यूजिक व टाइमर, ताज़ा न्यूज़, कैमरा से चीज़ पहचानने और आपकी बातें हमेशा के लिए याद रखने का काम कर सकता हूँ।",
                 spokenLanguage = AssistantLanguage.HINDI,
                 actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
-                suggestions = listOf("फ्लैशलाइट ऑन करो", "गाना बजाओ", "हमेशा याद रखो...")
+                suggestions = listOf("फ्लैशलाइट ऑन करो", "गाना बजाओ", "समय बताओ")
             )
         }
 
@@ -541,9 +609,16 @@ object LocalCommandRouter {
         }
 
         // 7. Current Time & Date / Day
-        if (lower.contains("time kya") || lower.contains("what time") || lower.contains("kitna baja") ||
-            lower.contains("कितना बजा") || lower.contains("समय क्या") || lower.contains("टाइम क्या")
-        ) {
+        val asksTime = !lower.contains("timer") && !lower.contains("टाइमर") && (
+            lower.contains("time kya") || lower.contains("what time") || lower.contains("what's the time") ||
+                lower.contains("tell me the time") || lower.contains("current time") || lower == "time" ||
+                lower.contains("kitna baja") || lower.contains("kitne baje") ||
+                lower.contains("कितना बजा") || lower.contains("कितने बजे") ||
+                lower.contains("समय क्या") || lower.contains("समय बता") ||
+                lower.contains("टाइम क्या") || lower.contains("टाइम बता") ||
+                lower.contains("टाइम हुआ") || lower.contains("अभी टाइम")
+            )
+        if (asksTime) {
             val formattedTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
             return AliBrainResult(
                 replyText = "बॉस, अभी समय $formattedTime हुआ है।",
@@ -553,8 +628,9 @@ object LocalCommandRouter {
             )
         }
 
-        if (lower.contains("तारीख") || lower.contains("कौन सा दिन") || lower.contains("what day") ||
-            lower.contains("today's date") || lower.contains("today date") || lower.contains("date kya")
+        if (lower.contains("तारीख") || lower.contains("कौन सा दिन") || lower.contains("आज का दिन") ||
+            lower.contains("what day") || lower.contains("today's date") || lower.contains("today date") ||
+            lower.contains("what's the date") || lower.contains("date kya") || lower.contains("aaj ki tarikh")
         ) {
             val formattedDate = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale.forLanguageTag("hi-IN")).format(Date())
             return AliBrainResult(
@@ -597,8 +673,11 @@ object LocalCommandRouter {
         // 9. Flashlight / Torch
         routeFlashlightClause(lower)?.let { return it }
 
-        // 10. Volume controls
-        if (lower.contains("volume") || lower.contains("वॉल्यूम") || lower.contains("आवाज़") || lower.contains("आवाज")) {
+        // 10. Volume controls (avoid misrouting "मेरी आवाज़ आ रही है क्या")
+        val isVoiceHearingCheck = lower.contains("आ रही") || lower.contains("आ रहा") || lower.contains("सुन रहे")
+        if (!isVoiceHearingCheck &&
+            (lower.contains("volume") || lower.contains("वॉल्यूम") || lower.contains("आवाज़") || lower.contains("आवाज"))
+        ) {
             val numberMatch = Regex("\\b(\\d{1,3})\\b").find(lower)?.groupValues?.get(1)?.toIntOrNull()
             val payload = when {
                 lower.contains("mute") || lower.contains("म्यूट") -> "mute"
@@ -644,11 +723,30 @@ object LocalCommandRouter {
             )
         }
 
-        // 12. Internet / Mobile Data ON & OFF, Wi-Fi & Bluetooth panels
+        // 12. Internet / Network Status Check + Mobile Data ON/OFF, Wi-Fi & Bluetooth panels
         val mentionsInternetOrData = lower.contains("internet") || lower.contains("इंटरनेट") ||
             lower.contains("mobile data") || lower.contains("मोबाइल डेटा") || lower.contains("मोबाइल डाटा") ||
             lower.contains("डेटा") || lower.contains("डाटा") ||
             Regex("\\b(net|data)\\b").containsMatchIn(lower) || lower.contains("नेट ") || lower == "नेट"
+
+        val asksInternetStatus = (mentionsInternetOrData || lower.contains("नेटवर्क") || lower.contains("network")) &&
+            (lower.contains("चल रहा") || lower.contains("आ रहा") || lower.contains("कैसा") ||
+                lower.contains("है क्या") || lower.contains("चेक") || lower.contains("check") ||
+                lower.contains("status") || lower.contains("working") || lower.contains("प्रॉब्लम"))
+        if (asksInternetStatus) {
+            val netDesc = when {
+                telemetry.internetConnected && telemetry.wifiConnected -> "फ़ोन में Wi-Fi इंटरनेट चालू है।"
+                telemetry.internetConnected -> "फ़ोन में मोबाइल डेटा / इंटरनेट कनेक्शन चालू है।"
+                else -> "अभी फ़ोन का इंटरनेट बंद है — लेकिन मैं ऑफ़लाइन कमांड और कॉलिंग चला सकता हूँ।"
+            }
+            return AliBrainResult(
+                replyText = "बॉस, $netDesc",
+                spokenLanguage = AssistantLanguage.HINDI,
+                actions = listOf(DeviceAction(ActionType.SPEAK_ONLY)),
+                suggestions = listOf(if (telemetry.internetConnected) "ताज़ा न्यूज़ सुनाओ" else "इंटरनेट ऑन करो", "बैटरी बताओ")
+            )
+        }
+
         if (mentionsInternetOrData && !lower.contains("wifi") && !lower.contains("वाई")) {
             val turnOff = Regex("\\b(off|close|disable|band)\\b").containsMatchIn(lower) ||
                 lower.contains("ऑफ") || lower.contains("ऑफ़") || lower.contains("बंद")

@@ -1317,4 +1317,65 @@ class ExampleRobolectricTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("voice_orb_button").assertIsDisplayed()
     }
+
+    @Test
+    fun `voice offline routes and firebase error classification avoid false internet errors`() {
+        val firebaseMissing = IllegalStateException("Default FirebaseApp is not initialized in this process com.aistudio.leonjarvis.xkmqzp")
+        assertTrue(AliAiBrain.isConfigOrPermissionIssue(firebaseMissing))
+        val describedMissing = AliAiBrain.describeError(firebaseMissing)
+        assertTrue(describedMissing.contains("google-services.json"))
+        assertFalse(describedMissing.contains("Internet / DNS unavailable"))
+
+        val offlineHostErr = java.net.UnknownHostException("Unable to resolve host generativelanguage.googleapis.com")
+        assertFalse(AliAiBrain.isConfigOrPermissionIssue(offlineHostErr))
+        assertTrue(AliAiBrain.describeError(offlineHostErr).contains("Internet / DNS unavailable"))
+
+        val connectedTelemetry = DeviceTelemetry(internetConnected = true, wifiConnected = true)
+        val timeRes = LocalCommandRouter.tryFastPath(
+            rawPrompt = "टाइम बताओ",
+            defaultLanguage = AssistantLanguage.HINDI,
+            telemetry = connectedTelemetry,
+            notifications = emptyList(),
+            tasks = emptyList()
+        )
+        assertTrue(timeRes?.replyText?.contains("समय") == true)
+
+        val netCheckRes = LocalCommandRouter.tryFastPath(
+            rawPrompt = "इंटरनेट चल रहा है क्या",
+            defaultLanguage = AssistantLanguage.HINDI,
+            telemetry = connectedTelemetry,
+            notifications = emptyList(),
+            tasks = emptyList()
+        )
+        assertTrue(netCheckRes?.replyText?.contains("Wi-Fi इंटरनेट चालू है") == true)
+
+        val casualGreet = LocalCommandRouter.tryFallback(
+            rawPrompt = "आवाज़ आ रही है क्या",
+            defaultLanguage = AssistantLanguage.HINDI,
+            telemetry = connectedTelemetry,
+            notifications = emptyList(),
+            tasks = emptyList()
+        )
+        assertTrue(casualGreet?.replyText?.contains("साफ़ आ रही है") == true)
+
+        val capabilityFeminine = LocalCommandRouter.tryFastPath(
+            rawPrompt = "तुम क्या-क्या कर सकती हो",
+            defaultLanguage = AssistantLanguage.HINDI,
+            telemetry = connectedTelemetry,
+            notifications = emptyList(),
+            tasks = emptyList(),
+            ownerName = "अली"
+        )
+        assertTrue(capabilityFeminine?.replyText?.contains("LEON AI") == true)
+        assertTrue(capabilityFeminine?.replyText?.contains("अली") == true)
+
+        assertEquals(
+            "ताजमहल",
+            com.example.ai.PublicKnowledgeFallback.extractSearchTopic("ताजमहल कहाँ है बताओ?")
+        )
+        val parsedWiki = com.example.ai.PublicKnowledgeFallback.parseWikipediaExtractJson(
+            """{"query":{"pages":{"123":{"title":"ताजमहल","extract":"ताजमहल भारत के आगरा शहर में स्थित एक विश्व धरोहर मक़बरा है।"}}}}"""
+        )
+        assertTrue(parsedWiki?.contains("आगरा") == true)
+    }
 }

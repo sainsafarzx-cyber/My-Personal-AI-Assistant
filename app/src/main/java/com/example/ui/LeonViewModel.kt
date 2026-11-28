@@ -15,6 +15,7 @@ import com.example.ai.AliAiBrain
 import com.example.ai.CallReceptionistEngine
 import com.example.ai.HumanWisdomEngine
 import com.example.ai.LocalCommandRouter
+import com.example.ai.PublicKnowledgeFallback
 import com.example.audio.LeonSpeaker
 import com.example.automation.LeonActionExecutor
 import com.example.data.ActionType
@@ -577,9 +578,8 @@ class LeonViewModel(
                     creatorTagline = prefs.creatorTagline
                 )
 
-                _isThinking.value = false
-
                 result.onSuccess { brainResult ->
+                    _isThinking.value = false
                     applyBrainResult(brainResult, prefs.memoryConsentGranted, prefs.voiceSpeed.toFloat(), speakResponse)
                 }.onFailure { err ->
                     val offlineRecovery = withContext(Dispatchers.Default) {
@@ -594,21 +594,48 @@ class LeonViewModel(
                             memories = currentMemoryList
                         )
                     }
-                    if (offlineRecovery != null) {
-                        applyBrainResult(offlineRecovery, prefs.memoryConsentGranted, prefs.voiceSpeed.toFloat(), speakResponse)
+                    val knowledgeRecovery = if (offlineRecovery == null && latestTelemetry.internetConnected) {
+                        PublicKnowledgeFallback.tryLookupAnswer(
+                            rawPrompt = clean,
+                            defaultLanguage = lang,
+                            ownerName = prefs.ownerName
+                        )
+                    } else {
+                        null
+                    }
+                    _isThinking.value = false
+                    val recoveryResult = offlineRecovery ?: knowledgeRecovery
+                    if (recoveryResult != null) {
+                        applyBrainResult(recoveryResult, prefs.memoryConsentGranted, prefs.voiceSpeed.toFloat(), speakResponse)
                     } else {
                         val msg = AliAiBrain.describeError(err)
+                        val configIssue = AliAiBrain.isConfigOrPermissionIssue(err)
                         _statusBanner.value = msg
-                        val failText = "माफ़ कीजिए बॉस, ALI AI अभी नेटवर्क से कनेक्ट नहीं हो पा रही ($msg)। आप ऑफ़लाइन में भी 'गाना बजाओ', 'टॉर्च ऑन', 'ताज़ा न्यूज़', 'वॉल्यूम बढ़ाओ', 'बैटरी बताओ' या 'YouTube खोलो' बोल सकते हैं।"
+                        val failText = when {
+                            configIssue ->
+                                "बॉस, आपकी आवाज़ व कमांड मिल गया! इस ऐप बिल्ड में Cloud AI (Firebase) कॉन्फ़िग नहीं जुड़ा है, इसलिए केवल बहुत गहन AI सवाल अभी नहीं खुल रहे — लेकिन मैं कॉलिंग, गाना बजाने, टॉर्च, ब्राइटनेस, वॉल्यूम, समय/तारीख, ताज़ा न्यूज़, मेमोरी और फोन के सभी कमांड तुरंत कर सकता हूँ!"
+                            !latestTelemetry.internetConnected ->
+                                "बॉस, अभी फ़ोन का इंटरनेट बंद है। ऑफ़लाइन में भी आप 'गाना बजाओ', 'टॉर्च ऑन', 'समय बताओ', 'वॉल्यूम बढ़ाओ', 'बैटरी बताओ' या 'कॉल लगाओ' बोल सकते हैं।"
+                            else ->
+                                "बॉस, अभी क्लाउड AI सर्वर से जवाब नहीं मिल पाया। आप 'गाना बजाओ', 'टॉर्च ऑन', 'ताज़ा न्यूज़', 'वॉल्यूम बढ़ाओ', 'बैटरी बताओ' या 'YouTube खोलो' बोल सकते हैं।"
+                        }
                         repository.addConversationMessage(
                             role = "model",
                             text = failText,
                             language = lang,
-                            actionSummary = "ERROR"
+                            actionSummary = "INFO"
                         )
                         if (speakResponse && _voiceRepliesEnabled.value) {
+                            val spokenNotice = when {
+                                configIssue ->
+                                    "बॉस, इस बिल्ड में क्लाउड AI सेट नहीं है — लेकिन कॉलिंग, म्यूजिक, न्यूज़, टॉर्च, समय और फ़ोन के सभी कमांड तैयार हैं।"
+                                !latestTelemetry.internetConnected ->
+                                    "बॉस, अभी इंटरनेट बंद है — लेकिन ऑफ़लाइन कमांड तैयार हैं।"
+                                else ->
+                                    "बॉस, क्लाउड AI से अभी संपर्क नहीं हो पाया — लेकिन बाकी कमांड तैयार हैं।"
+                            }
                             speakOutLoud(
-                                "माफ़ कीजिए बॉस, इंटरनेट समस्या है — लेकिन बाकी कमांड तैयार हैं।",
+                                spokenNotice,
                                 AssistantLanguage.HINDI,
                                 prefs.voiceSpeed.toFloat()
                             )
