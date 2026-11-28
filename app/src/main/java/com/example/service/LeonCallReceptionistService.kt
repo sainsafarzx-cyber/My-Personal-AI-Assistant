@@ -561,6 +561,8 @@ class LeonCallReceptionistService : Service() {
             .setContentText(subtitle)
             .setStyle(NotificationCompat.BigTextStyle().bigText(subtitle))
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setContentIntent(openIntent)
             .build()
     }

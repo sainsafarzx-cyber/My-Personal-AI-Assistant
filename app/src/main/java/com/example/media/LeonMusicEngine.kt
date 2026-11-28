@@ -340,6 +340,7 @@ object LeonMusicEngine {
                 var sampleIndex = 0L
                 val samplesPerChord = SAMPLE_RATE * 4
                 val twoPi = 2.0 * PI
+                var smoothedGain = if (ducked || ttsSpeaking) 0.22 else 0.85
 
                 while (internalPlaying) {
                     val preset = presets[presetIndex]
@@ -353,6 +354,7 @@ object LeonMusicEngine {
                     val targetGain = if (ducked || ttsSpeaking) 0.22 else 0.85
 
                     for (i in 0 until chunkFrames) {
+                        smoothedGain += (targetGain - smoothedGain) * 0.0015
                         val t = (sampleIndex + i).toDouble() / SAMPLE_RATE.toDouble()
                         val lfo = 0.85 + 0.15 * sin(twoPi * 0.25 * t)
                         var mix = 0.0
@@ -360,7 +362,7 @@ object LeonMusicEngine {
                             mix += sin(twoPi * freq * t) * 0.22
                         }
                         mix += sin(twoPi * (chord[0] * 0.5) * t) * 0.18
-                        val scaled = (mix * barEnvelope * lfo * targetGain * 11500.0).toInt()
+                        val scaled = (mix * barEnvelope * lfo * smoothedGain * 11500.0).toInt()
                             .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
                         buffer[i] = scaled.toShort()
                     }

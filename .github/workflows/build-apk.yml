@@ -1,7 +1,7 @@
 name: Build LEON AI APK
 
 on:
-  push:IllegalStateException
+  push:
     branches:
       - "**"
   workflow_dispatch:

@@ -14,6 +14,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -54,9 +57,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import kotlin.math.sqrt
 
 private const val TAG = "LeonVoiceService"
 private const val CHANNEL_ID = "leon_always_ready_channel"
@@ -224,6 +229,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var backgroundAiJob: Job? = null
     private var backgroundTimerJob: Job? = null
+    private var vadJob: Job? = null
 
     private val repository by lazy {
         LeonRepository(LeonDatabase.getInstance(applicationContext), applicationContext)
@@ -243,6 +249,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
     private var speechSpeed = 1.0f
     private var isListening = false
     private var useOfflineRecognizerNext = false
+    private var bypassVadOnce = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastSpokenRawText = ""
     private var lastSpokenWasPhoneticFallback = false
@@ -656,6 +663,8 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             .setContentText(subtitle)
             .setStyle(NotificationCompat.BigTextStyle().bigText(subtitle))
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(if (musicActive) NotificationCompat.CATEGORY_TRANSPORT else NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(openAppIntent)
@@ -678,6 +687,8 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
             ).apply {
                 description = getString(R.string.voice_channel_desc)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setSound(null, null)
+                enableVibration(false)
             }
             val nm = getSystemService(NotificationManager::class.java)
             nm?.createNotificationChannel(channel)
@@ -691,14 +702,114 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    private fun stopSilentVad() {
+        vadJob?.cancel()
+        vadJob = null
+    }
+
     private fun cancelListenTimers() {
         mainHandler.removeCallbacks(listenRunnable)
         mainHandler.removeCallbacks(listenWatchdogRunnable)
+        stopSilentVad()
     }
 
     private fun scheduleListen(delayMs: Long) {
         cancelListenTimers()
         mainHandler.postDelayed(listenRunnable, delayMs)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startSilentVoiceActivityWait() {
+        if (!alwaysReadyMode || awaitingActiveCommand || !hasMicPermission()) return
+        if (VoiceServiceBridge.foregroundMicActive.value || isAudioInCall() || LeonSpeaker.isSpeaking.value) return
+        if (vadJob?.isActive == true) return
+
+        stopRecognizerInternal()
+        VoiceServiceBridge.setOrbState(VoiceOrbState.WAKE_LISTENING)
+
+        vadJob = serviceScope.launch {
+            val sampleRate = 16_000
+            val minBuf = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            ).coerceAtLeast(2048)
+
+            var recorder: AudioRecord? = null
+            var detectedSpeech = false
+            var recorderInitOk = false
+            try {
+                recorder = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    minBuf
+                )
+                if (recorder.state == AudioRecord.STATE_INITIALIZED) {
+                    recorderInitOk = true
+                    recorder.startRecording()
+                    val frame = ShortArray(800)
+                    var consecutiveHotFrames = 0
+                    while (isActive && alwaysReadyMode && !awaitingActiveCommand) {
+                        if (VoiceServiceBridge.foregroundMicActive.value ||
+                            isAudioInCall() ||
+                            LeonSpeaker.isSpeaking.value ||
+                            (!lockScreenModeEnabled && isScreenOffOrLocked())
+                        ) {
+                            break
+                        }
+                        val read = recorder.read(frame, 0, frame.size)
+                        if (read > 0) {
+                            var sumSq = 0.0
+                            for (i in 0 until read) {
+                                val s = frame[i].toDouble()
+                                sumSq += s * s
+                            }
+                            val rms = sqrt(sumSq / read)
+                            if (rms > 850.0) {
+                                consecutiveHotFrames++
+                                if (consecutiveHotFrames >= 3) {
+                                    detectedSpeech = true
+                                    break
+                                }
+                            } else {
+                                consecutiveHotFrames = 0
+                            }
+                        } else {
+                            delay(80L)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Mic unavailable or in use; fall back calmly
+            } finally {
+                runCatching {
+                    recorder?.stop()
+                    recorder?.release()
+                }
+            }
+
+            if (isActive && alwaysReadyMode && !awaitingActiveCommand &&
+                !VoiceServiceBridge.foregroundMicActive.value &&
+                (lockScreenModeEnabled || !isScreenOffOrLocked())
+            ) {
+                if (detectedSpeech) {
+                    mainHandler.post {
+                        bypassVadOnce = true
+                        startListeningInternal()
+                    }
+                } else if (!recorderInitOk) {
+                    delay(4_500L)
+                    if (isActive && alwaysReadyMode) {
+                        mainHandler.post {
+                            bypassVadOnce = true
+                            startListeningInternal()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun startListeningInternal() {
@@ -726,10 +837,20 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
         }
         if (!hasMicPermission()) {
             awaitingActiveCommand = false
+            bypassVadOnce = false
             LeonMusicEngine.setDucked(false)
             VoiceServiceBridge.setOrbState(VoiceOrbState.IDLE)
             return
         }
+
+        // In 24/7 idle mode, wait silently via AudioRecord VAD so SpeechRecognizer never beeps ("tuk-tuk") in a loop!
+        val shouldUseSilentVad = alwaysReadyMode && !awaitingActiveCommand && !bypassVadOnce
+        bypassVadOnce = false
+        if (shouldUseSilentVad) {
+            startSilentVoiceActivityWait()
+            return
+        }
+
         val canOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
         val canStandard = SpeechRecognizer.isRecognitionAvailable(this)
@@ -931,6 +1052,8 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, currentLanguage.localeTag)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3200L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2200L)
                 if (preferOffline) {
                     putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                 }
@@ -1526,6 +1649,7 @@ class LeonVoiceService : Service(), TextToSpeech.OnInitListener {
 
     private fun stopRecognizerInternal() {
         mainHandler.removeCallbacks(listenWatchdogRunnable)
+        stopSilentVad()
         try {
             speechRecognizer?.cancel()
             speechRecognizer?.destroy()
