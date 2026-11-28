@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
@@ -74,7 +75,6 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.R
 import com.example.data.AssistantLanguage
 import com.example.data.CloudSyncState
 import com.example.data.MemoryCategory
@@ -654,6 +654,7 @@ private fun ForeverOwnerIdentityCard(
     }
 }
 
+@SuppressLint("DiscouragedApi")
 private fun onGoogleSignInClicked(
     context: Context,
     credentialManager: CredentialManager,
@@ -663,9 +664,17 @@ private fun onGoogleSignInClicked(
     onAuthCancelled: () -> Unit = {}
 ) {
     val clientId = try {
-        context.getString(R.string.default_web_client_id)
+        val resId = context.resources.getIdentifier(
+            "default_web_client_id",
+            "string",
+            context.packageName
+        )
+        if (resId != 0) context.getString(resId).trim() else ""
     } catch (_: Exception) {
-        onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
+        ""
+    }
+    if (clientId.isBlank()) {
+        onAuthError("Google Sign-In configuration missing: google-services.json / default_web_client_id not configured in this build.")
         return
     }
     val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
